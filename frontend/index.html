@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TutoriAI</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-dqY8LKum03jGzYtUKPTy3lNMndvrYVF/1Ddb1iD7agEXkN6mPQ0PqSxkbZVqhlV+3I8I4JVXuPVf9aN6XpgIlg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+    <main>
+        <section id="profile" class="tab active">
+            <h2>Profile</h2>
+            <form>
+                <label>Name<input type="text" placeholder="Your name"></label>
+                <label>University<input type="text" placeholder="Your university"></label>
+                <label>Experience<textarea placeholder="Describe your experience"></textarea></label>
+                <label>Other Info<textarea placeholder="Additional information"></textarea></label>
+            </form>
+        </section>
+        <section id="calendar" class="tab">
+            <h2>Calendar</h2>
+            <p>Schedule your classes here.</p>
+        </section>
+        <section id="classroom" class="tab">
+            <h2>Classroom</h2>
+            <textarea placeholder="Notes about students"></textarea>
+            <button class="primary-btn">Add Assignment</button>
+        </section>
+        <section id="generator" class="tab">
+            <h2>Assignment Generator</h2>
+            <p>This will use OpenAI's o4 mini high model to generate assignments. <!-- TODO: integrate model --></p>
+        </section>
+    </main>
+    <nav class="bottom-nav">
+        <button data-target="profile" class="active"><i class="fa fa-user"></i><span>Profile</span></button>
+        <button data-target="calendar"><i class="fa fa-calendar"></i><span>Calendar</span></button>
+        <button data-target="classroom"><i class="fa fa-chalkboard"></i><span>Classroom</span></button>
+        <button data-target="generator"><i class="fa fa-magic"></i><span>Generator</span></button>
+    </nav>
+    <script src="script.js"></script>
+</body>
+</html>
