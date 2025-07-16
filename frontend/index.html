@@ -3,41 +3,251 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TutoriAI</title>
+    <title>TutoriAI - Video Buddy</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-dqY8LKum03jGzYtUKPTy3lNMndvrYVF/1Ddb1iD7agEXkN6mPQ0PqSxkbZVqhlV+3I8I4JVXuPVf9aN6XpgIlg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body>
-    <main>
-        <section id="profile" class="tab active">
-            <h2>Profile</h2>
-            <form>
-                <label>Name<input type="text" placeholder="Your name"></label>
-                <label>University<input type="text" placeholder="Your university"></label>
-                <label>Experience<textarea placeholder="Describe your experience"></textarea></label>
-                <label>Other Info<textarea placeholder="Additional information"></textarea></label>
-            </form>
-        </section>
-        <section id="calendar" class="tab">
-            <h2>Calendar</h2>
-            <p>Schedule your classes here.</p>
-        </section>
-        <section id="classroom" class="tab">
-            <h2>Classroom</h2>
-            <textarea placeholder="Notes about students"></textarea>
-            <button class="primary-btn">Add Assignment</button>
-        </section>
-        <section id="generator" class="tab">
-            <h2>Assignment Generator</h2>
-            <p>This will use OpenAI's o4 mini high model to generate assignments. <!-- TODO: integrate model --></p>
-        </section>
-    </main>
-    <nav class="bottom-nav">
-        <button data-target="profile" class="active"><i class="fa fa-user"></i><span>Profile</span></button>
-        <button data-target="calendar"><i class="fa fa-calendar"></i><span>Calendar</span></button>
-        <button data-target="classroom"><i class="fa fa-chalkboard"></i><span>Classroom</span></button>
-        <button data-target="generator"><i class="fa fa-magic"></i><span>Generator</span></button>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <div class="logo">
+                <i class="fas fa-star"></i>
+                <i class="fas fa-video"></i>
+                <span>TutoriAI</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="pro-badge">Pro</div>
+        </div>
+    </header>
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="nav-item active" data-target="dashboard">
+            <i class="fas fa-home"></i>
+            <span>Home</span>
+        </div>
+        <div class="nav-item" data-target="calendar">
+            <i class="fas fa-calendar"></i>
+            <span>Calendar</span>
+        </div>
+        <div class="nav-item" data-target="recording">
+            <i class="fas fa-record-vinyl"></i>
+            <span>Recording</span>
+        </div>
+        <div class="nav-item" data-target="contacts">
+            <i class="fas fa-address-book"></i>
+            <span>Contacts</span>
+        </div>
+        <div class="nav-item" data-target="whiteboards">
+            <i class="fas fa-chalkboard"></i>
+            <span>Whiteboards</span>
+        </div>
+        <div class="nav-item logout">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Log out</span>
+        </div>
     </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Dashboard View -->
+        <div id="dashboard" class="content-section active">
+            <div class="dashboard-grid">
+                <!-- User Greeting and Agenda Card -->
+                <div class="card greeting-card">
+                    <h2>Good morning, John!</h2>
+                    <div class="user-profile">
+                        <div class="profile-pic">
+                            <i class="fas fa-user"></i>
+                        </div>
+                    </div>
+                    <div class="agenda">
+                        <h3>Your agenda today:</h3>
+                        <div class="meeting-item">
+                            <span class="meeting-time">9:00 - 9:15</span>
+                            <span class="meeting-title">Morning stand-up</span>
+                            <div class="meeting-actions">
+                                <button class="btn-secondary">Reschedule</button>
+                                <button class="btn-tertiary">Change attendance</button>
+                            </div>
+                        </div>
+                        <div class="meeting-item">
+                            <span class="meeting-time">10:00 - 10:30</span>
+                            <span class="meeting-title">Managers catch-up</span>
+                            <div class="meeting-actions">
+                                <button class="btn-secondary">Reschedule</button>
+                                <button class="btn-tertiary">Change attendance</button>
+                            </div>
+                        </div>
+                        <div class="meeting-item">
+                            <span class="meeting-time">13:00 - 14:45</span>
+                            <span class="meeting-title">Ben 1:1</span>
+                            <div class="meeting-actions">
+                                <button class="btn-secondary">Reschedule</button>
+                                <button class="btn-tertiary">Change attendance</button>
+                            </div>
+                        </div>
+                        <div class="meeting-item">
+                            <span class="meeting-time">15:00 - 15:30</span>
+                            <span class="meeting-title">KPI clarification</span>
+                            <div class="meeting-actions">
+                                <button class="btn-secondary">Reschedule</button>
+                                <button class="btn-tertiary">Change attendance</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Meeting Controls Card -->
+                <div class="card controls-card">
+                    <h3>Quick Actions</h3>
+                    <div class="control-buttons">
+                        <button class="control-btn">
+                            <i class="fas fa-users"></i>
+                            <span>Start a meeting</span>
+                        </button>
+                        <button class="control-btn">
+                            <i class="fas fa-plus-circle"></i>
+                            <span>Join a meeting</span>
+                        </button>
+                        <button class="control-btn">
+                            <i class="fas fa-calendar-check"></i>
+                            <span>Schedule a meeting</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Calendar Card -->
+                <div class="card calendar-card">
+                    <h3>Calendar</h3>
+                    <div class="calendar-header">
+                        <span>August 2023</span>
+                        <i class="fas fa-calendar"></i>
+                    </div>
+                    <div class="calendar-grid">
+                        <div class="calendar-day">1</div>
+                        <div class="calendar-day">2</div>
+                        <div class="calendar-day">3</div>
+                        <div class="calendar-day">4</div>
+                        <div class="calendar-day">5</div>
+                        <div class="calendar-day">6</div>
+                        <div class="calendar-day current">7</div>
+                        <div class="calendar-day">8</div>
+                        <div class="calendar-day">9</div>
+                        <div class="calendar-day">10</div>
+                        <div class="calendar-day">11</div>
+                        <div class="calendar-day">12</div>
+                        <div class="calendar-day">13</div>
+                        <div class="calendar-day">14</div>
+                        <div class="calendar-day">15</div>
+                        <div class="calendar-day">16</div>
+                        <div class="calendar-day">17</div>
+                        <div class="calendar-day">18</div>
+                        <div class="calendar-day">19</div>
+                        <div class="calendar-day">20</div>
+                        <div class="calendar-day">21</div>
+                        <div class="calendar-day">22</div>
+                        <div class="calendar-day">23</div>
+                        <div class="calendar-day">24</div>
+                        <div class="calendar-day">25</div>
+                        <div class="calendar-day">26</div>
+                        <div class="calendar-day">27</div>
+                        <div class="calendar-day">28</div>
+                        <div class="calendar-day">29</div>
+                        <div class="calendar-day">30</div>
+                        <div class="calendar-day">31</div>
+                    </div>
+                    <div class="calendar-nav">
+                        <button class="nav-arrow"><i class="fas fa-chevron-left"></i></button>
+                        <button class="nav-arrow"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </div>
+
+                <!-- Invitations Card -->
+                <div class="card invitations-card">
+                    <h3>Invitations</h3>
+                    <div class="invitation-item">
+                        <div class="inviter-pic">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="invitation-details">
+                            <span class="inviter-name">Samson</span>
+                            <span class="invitation-event">invited to "Q4 planning"</span>
+                        </div>
+                        <button class="btn-primary">RSVP</button>
+                    </div>
+                    <div class="invitation-item">
+                        <div class="inviter-pic">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="invitation-details">
+                            <span class="inviter-name">Lena</span>
+                            <span class="invitation-event">invited to "Breakfast!!!"</span>
+                        </div>
+                        <button class="btn-primary">RSVP</button>
+                    </div>
+                    <div class="invitation-item">
+                        <div class="inviter-pic">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="invitation-details">
+                            <span class="inviter-name">Dominic</span>
+                            <span class="invitation-event">invited to "Brainstorming"</span>
+                        </div>
+                        <button class="btn-primary">RSVP</button>
+                    </div>
+                </div>
+
+                <!-- Insights Card -->
+                <div class="card insights-card">
+                    <h3>Insights</h3>
+                    <div class="insight-metric">
+                        <span class="metric-label">Number of meetings you hosted this week</span>
+                        <span class="metric-value">8</span>
+                    </div>
+                    <div class="insight-metric">
+                        <span class="metric-label">Number of meetings you hosted this month</span>
+                        <span class="metric-value">16</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calendar View -->
+        <div id="calendar" class="content-section">
+            <div class="card">
+                <h2>Calendar</h2>
+                <p>Schedule your classes here.</p>
+            </div>
+        </div>
+
+        <!-- Recording View -->
+        <div id="recording" class="content-section">
+            <div class="card">
+                <h2>Recording</h2>
+                <p>Manage your video recordings here.</p>
+            </div>
+        </div>
+
+        <!-- Contacts View -->
+        <div id="contacts" class="content-section">
+            <div class="card">
+                <h2>Contacts</h2>
+                <p>Manage your contacts and students here.</p>
+            </div>
+        </div>
+
+        <!-- Whiteboards View -->
+        <div id="whiteboards" class="content-section">
+            <div class="card">
+                <h2>Whiteboards</h2>
+                <p>Access your digital whiteboards here.</p>
+            </div>
+        </div>
+    </main>
+
     <script src="script.js"></script>
 </body>
 </html>
