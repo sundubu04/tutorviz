@@ -1,0 +1,520 @@
+/* Whiteboards Styles */
+.whiteboards-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.loading {
+    text-align: center;
+    padding: 2rem;
+    color: #666;
+    font-size: 1.1rem;
+}
+
+.error {
+    text-align: center;
+    padding: 2rem;
+    color: #d32f2f;
+    background: #ffebee;
+    border-radius: 8px;
+    margin: 1rem 0;
+}
+
+.preview-text {
+    background: white;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #333;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin: 2px;
+}
+
+.preview-shape {
+    width: 40px;
+    height: 40px;
+    background: #e3f2fd;
+    border: 2px solid #2196f3;
+    border-radius: 4px;
+    margin: 2px;
+}
+
+.preview-pen {
+    margin: 2px;
+}
+
+.whiteboards-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.whiteboards-header h2 {
+    color: #1976d2;
+    font-size: 2rem;
+    font-weight: 600;
+}
+
+.create-whiteboard-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+}
+
+.whiteboards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 2rem;
+}
+
+.whiteboard-card {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.whiteboard-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+
+.whiteboard-preview {
+    height: 200px;
+    background: #f8f9fa;
+    position: relative;
+    overflow: hidden;
+}
+
+.preview-content {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    bottom: 20px;
+}
+
+.preview-sticky {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.preview-sticky.yellow {
+    background: #fff3cd;
+    top: 10px;
+    left: 10px;
+}
+
+.preview-sticky.blue {
+    background: #d1ecf1;
+    top: 40px;
+    left: 80px;
+}
+
+.preview-sticky.green {
+    background: #d4edda;
+    top: 70px;
+    left: 20px;
+}
+
+.preview-sticky.red {
+    background: #f8d7da;
+    top: 20px;
+    left: 50px;
+}
+
+.preview-sticky.purple {
+    background: #e2d9f3;
+    top: 60px;
+    left: 100px;
+}
+
+.whiteboard-info {
+    padding: 1.5rem;
+}
+
+.whiteboard-info h3 {
+    color: #333;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.whiteboard-info p {
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.whiteboard-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.new-board {
+    border: 2px dashed #ddd;
+    background: #fafafa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+}
+
+.new-board:hover {
+    border-color: #1976d2;
+    background: #f0f8ff;
+}
+
+.new-board-content {
+    text-align: center;
+    color: #666;
+}
+
+.new-board-content i {
+    font-size: 3rem;
+    color: #1976d2;
+    margin-bottom: 1rem;
+}
+
+.new-board-content h3 {
+    color: #333;
+    margin-bottom: 0.5rem;
+}
+
+/* Whiteboard Editor Styles */
+.whiteboard-editor {
+    padding: 0;
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.whiteboard-header {
+    background: white;
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    position: fixed;
+    top: 80px;
+    left: 250px;
+    right: 0;
+    z-index: 100;
+}
+
+.whiteboard-header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.back-btn {
+    background: none;
+    border: none;
+    color: #1976d2;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.back-btn:hover {
+    color: #1565c0;
+}
+
+.whiteboard-header h2 {
+    color: #333;
+    font-weight: 600;
+}
+
+.whiteboard-header-right {
+    display: flex;
+    gap: 1rem;
+}
+
+.whiteboard-workspace {
+    display: flex;
+    height: calc(100vh - 160px);
+    margin-top: 80px;
+}
+
+.whiteboard-toolbar {
+    position: fixed;
+    left: 250px;
+    top: 160px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    z-index: 99;
+}
+
+.tool-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.tool-btn {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: #f8f9fa;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    color: #666;
+}
+
+.tool-btn:hover {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.tool-btn.active {
+    background: #1976d2;
+    color: white;
+}
+
+.whiteboard-canvas {
+    flex: 1;
+    background: #f5f5f5;
+    margin-left: 80px;
+    position: relative;
+    overflow: auto;
+    cursor: crosshair;
+}
+
+.whiteboard-sidebar {
+    width: 300px;
+    background: white;
+    border-left: 1px solid #e0e0e0;
+    padding: 1.5rem;
+    overflow-y: auto;
+}
+
+.sidebar-section {
+    margin-bottom: 2rem;
+}
+
+.sidebar-section h3 {
+    color: #333;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+}
+
+.content-card {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.content-card h4 {
+    color: #333;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.content-card p {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.sticky-note {
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    position: relative;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    min-height: 80px;
+}
+
+.sticky-note.yellow {
+    background: #fff3cd;
+}
+
+.sticky-note.blue {
+    background: #d1ecf1;
+}
+
+.sticky-note p {
+    margin: 0;
+    color: #333;
+    font-weight: 500;
+}
+
+.cursor-indicator {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background: #ff6b6b;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.cursor-indicator.juan {
+    background: #ffd93d;
+}
+
+.cursor-indicator.miriam {
+    background: #ff6b9d;
+}
+
+.task-card {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.task-card.yellow {
+    background: #fff3cd;
+    border-color: #ffeaa7;
+}
+
+.task-card h4 {
+    color: #333;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.status {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-right: 0.5rem;
+}
+
+.status.in-progress {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.assignee {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.whiteboard-controls {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    z-index: 99;
+}
+
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.zoom-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: #f8f9fa;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    transition: background 0.3s ease;
+}
+
+.zoom-btn:hover {
+    background: #e3f2fd;
+}
+
+.zoom-level {
+    font-weight: 600;
+    color: #333;
+    min-width: 50px;
+    text-align: center;
+}
+
+.help-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: #f8f9fa;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    transition: background 0.3s ease;
+}
+
+.help-btn:hover {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+/* Responsive Design for Whiteboards */
+@media (max-width: 1200px) {
+    .whiteboards-grid {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .whiteboard-header {
+        left: 0;
+        padding: 1rem;
+    }
+    
+    .whiteboard-toolbar {
+        left: 0;
+    }
+    
+    .whiteboard-canvas {
+        margin-left: 0;
+    }
+    
+    .whiteboard-sidebar {
+        display: none;
+    }
+    
+    .whiteboards-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+} 
