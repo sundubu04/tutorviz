@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whiteboard Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Whiteboard Functionality Test</h1>
+        
+        <div id="status"></div>
+        
+        <h2>Test Steps:</h2>
+        <ol>
+            <li>Click "Test API Connection" to verify backend is working</li>
+            <li>Click "Test Whiteboard List" to load whiteboards</li>
+            <li>Click "Test Open Whiteboard" to test the openWhiteboard function</li>
+        </ol>
+        
+        <button class="test-button" onclick="testAPIConnection()">Test API Connection</button>
+        <button class="test-button" onclick="testWhiteboardList()">Test Whiteboard List</button>
+        <button class="test-button" onclick="testOpenWhiteboard()">Test Open Whiteboard</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function showResults(content) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+        }
+
+        async function testAPIConnection() {
+            try {
+                showStatus('Testing API connection...', 'info');
+                const response = await fetch('http://localhost:3001/api/whiteboards?userId=1');
+                const data = await response.json();
+                
+                if (data.success) {
+                    showStatus(`✅ API connection successful! Found ${data.data.length} whiteboards`, 'success');
+                    showResults(data);
+                } else {
+                    showStatus(`❌ API returned error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ API connection failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testWhiteboardList() {
+            try {
+                showStatus('Testing whiteboard list loading...', 'info');
+                
+                // Simulate the loadWhiteboardDashboard function
+                const response = await fetch('http://localhost:3001/api/whiteboards?userId=1');
+                const data = await response.json();
+                
+                if (data.success && Array.isArray(data.data)) {
+                    showStatus(`✅ Whiteboard list loaded successfully! Found ${data.data.length} whiteboards`, 'success');
+                    showResults(data.data);
+                } else {
+                    showStatus(`❌ Failed to load whiteboard list: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error loading whiteboard list: ${error.message}`, 'error');
+            }
+        }
+
+        function testOpenWhiteboard() {
+            try {
+                showStatus('Testing openWhiteboard function...', 'info');
+                
+                // Check if the function exists
+                if (typeof openWhiteboard === 'function') {
+                    showStatus('✅ openWhiteboard function found!', 'success');
+                    
+                    // Test with a sample whiteboard ID
+                    const testId = 1;
+                    showStatus(`Testing with whiteboard ID: ${testId}`, 'info');
+                    
+                    // Call the function
+                    openWhiteboard(testId);
+                    
+                    showStatus('✅ openWhiteboard function called successfully!', 'success');
+                } else {
+                    showStatus('❌ openWhiteboard function not found!', 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error testing openWhiteboard: ${error.message}`, 'error');
+            }
+        }
+
+        // Load the whiteboard scripts
+        function loadWhiteboardScripts() {
+            const scripts = [
+                'features/whiteboard/whiteboard.js',
+                'features/whiteboard/whiteboard-list.js'
+            ];
+            
+            scripts.forEach(src => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = () => console.log(`Loaded: ${src}`);
+                script.onerror = () => console.error(`Failed to load: ${src}`);
+                document.head.appendChild(script);
+            });
+        }
+
+        // Load scripts when page loads
+        window.addEventListener('load', loadWhiteboardScripts);
+    </script>
+</body>
+</html> 

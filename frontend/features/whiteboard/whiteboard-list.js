@@ -146,5 +146,34 @@ async function createNewWhiteboard() {
 }
 
 function openWhiteboard(id) {
-    window.location.href = `/whiteboard/${id}`;
+    console.log('Opening whiteboard with ID:', id);
+    
+    // Switch to the embedded whiteboard editor section
+    const navItems = document.querySelectorAll('.nav-item');
+    const contentSections = document.querySelectorAll('.content-section');
+    
+    // Remove active states from all sections
+    navItems.forEach(nav => nav.classList.remove('active'));
+    contentSections.forEach(section => section.classList.remove('active'));
+    
+    // Show whiteboard editor section
+    const whiteboardEditorSection = document.getElementById('whiteboard-editor');
+    if (whiteboardEditorSection) {
+        console.log('Found whiteboard editor section, switching to it...');
+        whiteboardEditorSection.classList.add('active');
+        
+        // Initialize whiteboard manager if not already done
+        if (!window.whiteboardManager) {
+            console.log('Initializing WhiteboardManager...');
+            window.whiteboardManager = new WhiteboardManager();
+        }
+        
+        // Load the specific whiteboard
+        console.log('Loading whiteboard content...');
+        window.whiteboardManager.loadWhiteboard(id);
+    } else {
+        console.log('Whiteboard editor section not found, falling back to separate page...');
+        // Fallback to separate page if embedded section doesn't exist
+        window.location.href = `/whiteboard/${id}`;
+    }
 } 

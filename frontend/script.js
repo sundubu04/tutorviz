@@ -227,4 +227,59 @@ function setupWhiteboardNavigation() {
         };
         document.head.appendChild(script);
     }
+    
+    // Setup embedded whiteboard editor controls
+    setupEmbeddedWhiteboardControls();
+}
+
+// Setup embedded whiteboard editor controls
+function setupEmbeddedWhiteboardControls() {
+    // Back button functionality
+    const backBtn = document.getElementById('back-to-whiteboards');
+    if (backBtn) {
+        backBtn.addEventListener('click', function() {
+            // Switch back to whiteboards list
+            const navItems = document.querySelectorAll('.nav-item');
+            const contentSections = document.querySelectorAll('.content-section');
+            
+            // Remove active states from all sections
+            navItems.forEach(nav => nav.classList.remove('active'));
+            contentSections.forEach(section => section.classList.remove('active'));
+            
+            // Show whiteboards section
+            const whiteboardsSection = document.getElementById('whiteboards');
+            const whiteboardsNav = document.querySelector('[data-target="whiteboards"]');
+            if (whiteboardsSection && whiteboardsNav) {
+                whiteboardsSection.classList.add('active');
+                whiteboardsNav.classList.add('active');
+                
+                // Reload whiteboard list
+                if (typeof loadWhiteboardDashboard === 'function') {
+                    loadWhiteboardDashboard();
+                }
+            }
+        });
+    }
+    
+    // Share button functionality
+    const shareBtn = document.getElementById('share-btn');
+    if (shareBtn) {
+        shareBtn.addEventListener('click', function() {
+            const shareUrl = window.location.href;
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                alert('Share link copied to clipboard!');
+            });
+        });
+    }
+    
+    // Present button functionality
+    const presentBtn = document.getElementById('present-btn');
+    if (presentBtn) {
+        presentBtn.addEventListener('click', function() {
+            // Enter fullscreen mode
+            if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen();
+            }
+        });
+    }
 }

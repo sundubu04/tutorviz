@@ -1,11 +1,13 @@
 // Modern Whiteboard Editor with Backend Integration
 class WhiteboardManager {
     constructor() {
+        console.log('WhiteboardManager constructor called');
         this.currentTool = 'select';
         this.zoomLevel = 100;
         this.isDrawing = false;
         this.currentWhiteboardId = null;
         this.canvas = document.getElementById('whiteboard-canvas');
+        console.log('Canvas element:', this.canvas);
         this.apiBaseUrl = 'http://localhost:3001/api';
         this.elements = [];
         this.undoStack = [];
@@ -58,19 +60,23 @@ class WhiteboardManager {
 
     // --- Whiteboard Loading ---
     async loadWhiteboard(whiteboardId) {
+        console.log('Loading whiteboard with ID:', whiteboardId);
         this.currentWhiteboardId = whiteboardId;
         this.showLoading();
         try {
             const res = await fetch(`${this.apiBaseUrl}/whiteboards/${whiteboardId}?userId=1`);
             const data = await res.json();
+            console.log('Whiteboard data received:', data);
             if (data.success) {
                 this.elements = Array.isArray(data.data.content.elements) ? data.data.content.elements : [];
+                console.log('Elements loaded:', this.elements);
                 this.updateTitle(data.data.title);
                 this.renderCanvas();
             } else {
                 this.showError('Failed to load whiteboard: ' + data.error);
             }
         } catch (err) {
+            console.error('Error loading whiteboard:', err);
             this.showError('Network error loading whiteboard');
         }
     }
