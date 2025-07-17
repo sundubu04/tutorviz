@@ -4,7 +4,7 @@ const contentSections = document.querySelectorAll('.content-section');
 
 // Handle navigation clicks
 navItems.forEach(item => {
-    item.addEventListener('click', () => {
+    item.addEventListener('click', async () => {
         const target = item.dataset.target;
         
         // Skip if it's the logout item
@@ -20,9 +20,47 @@ navItems.forEach(item => {
         const targetSection = document.getElementById(target);
         if (targetSection) {
             targetSection.classList.add('active');
+            
+            // Load section-specific content from backend
+            await loadSectionContent(target);
         }
     });
 });
+
+// Load section-specific content from backend
+async function loadSectionContent(section) {
+    try {
+        console.log(`Loading content for section: ${section}`);
+        const response = await fetch(`http://localhost:3001/api/navigation/${section}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            console.log(`${section} data loaded:`, data.data.message);
+            
+            // Handle specific section loading
+            if (section === 'whiteboards') {
+                console.log('Triggering whiteboard dashboard load...');
+                // Trigger whiteboard list loading
+                if (typeof loadWhiteboardDashboard === 'function') {
+                    loadWhiteboardDashboard();
+                } else {
+                    console.log('loadWhiteboardDashboard function not found, loading script...');
+                    // Load the script if not already loaded
+                    const script = document.createElement('script');
+                    script.src = 'features/whiteboard/whiteboard-list.js';
+                    script.onload = () => {
+                        if (typeof loadWhiteboardDashboard === 'function') {
+                            loadWhiteboardDashboard();
+                        }
+                    };
+                    document.head.appendChild(script);
+                }
+            }
+        }
+    } catch (error) {
+        console.error(`Error loading ${section} content:`, error);
+    }
+}
 
 // Handle logout
 const logoutItem = document.querySelector('.nav-item.logout');
@@ -162,4 +200,31 @@ document.addEventListener('DOMContentLoaded', () => {
         
         greeting.textContent = `${timeGreeting}, John!`;
     }
+    
+    // Setup whiteboard navigation
+    setupWhiteboardNavigation();
 });
+
+// Setup whiteboard navigation
+function setupWhiteboardNavigation() {
+    // Handle whiteboard navigation clicks
+    const whiteboardNav = document.querySelector('[data-target="whiteboards"]');
+    if (whiteboardNav) {
+        whiteboardNav.addEventListener('click', () => {
+            // Load whiteboard content when navigating to whiteboards
+            if (window.loadWhiteboardContent) {
+                window.loadWhiteboardContent();
+            }
+        });
+    }
+    
+    // Load whiteboard list script when needed
+    if (!window.whiteboardListLoaded) {
+        const script = document.createElement('script');
+        script.src = 'features/whiteboard/whiteboard-list.js';
+        script.onload = () => {
+            window.whiteboardListLoaded = true;
+        };
+        document.head.appendChild(script);
+    }
+}
