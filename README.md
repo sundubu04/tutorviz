@@ -1,235 +1,178 @@
-# TutoriAI
+# TutoriAI - Classroom Dashboard
 
-A modern collaborative whiteboard application with a beautiful dashboard interface and real-time collaboration features.
+A modern React-based classroom management web application built with TypeScript and Tailwind CSS.
 
-## Features
+## 🚀 Features
 
-### Dashboard
-- **Modern UI**: Clean, responsive dashboard with sidebar navigation
-- **Meeting Management**: Schedule and manage meetings with RSVP functionality
-- **Calendar Integration**: View upcoming events and meetings
-- **Insights**: Analytics and progress tracking
-- **Responsive Design**: Works on desktop, tablet, and mobile devices
+- **Modern React Architecture**: Built with React 18, TypeScript, and functional components
+- **Responsive Design**: Mobile-first approach with Tailwind CSS
+- **Component-Based**: Reusable components for maintainable code
+- **Interactive UI**: Smooth animations and transitions
+- **Type Safety**: Full TypeScript support for better development experience
 
-### Whiteboard
-- **Miro-like Interface**: Professional whiteboard editor with toolbar
-- **Multiple Tools**: Select, text, sticky notes, shapes, connectors, and pen tools
-- **Real-time Collaboration**: Share whiteboards with team members
-- **Content Persistence**: Save and load whiteboard content automatically
-- **Zoom Controls**: Pan and zoom functionality
-- **Sidebar**: Project brief, brainstorm ideas, and action items
-
-### Backend API
-- **Node.js & Express**: RESTful API with proper error handling
-- **PostgreSQL Database**: Reliable data storage with relationships
-- **User Authentication**: JWT-based authentication system
-- **CRUD Operations**: Full whiteboard management
-- **Collaboration**: Share and manage whiteboard access
-- **Comprehensive Testing**: Unit and integration tests
-
-## Architecture
+## 📁 Project Structure
 
 ```
-TutoriAI/
-├── frontend/                 # Frontend application
-│   ├── index.html           # Main dashboard
-│   ├── whiteboard.html      # Standalone whiteboard page
-│   ├── styles.css           # Main styles
-│   ├── script.js            # Dashboard functionality
-│   └── features/
-│       └── whiteboard/      # Whiteboard feature
-│           ├── whiteboard.html
-│           ├── whiteboard.css
-│           ├── whiteboard.js
-│           └── README.md
-├── backend/                  # Backend API
-│   ├── server.js            # Express server
-│   ├── package.json         # Dependencies
-│   ├── config/
-│   │   └── database.js      # PostgreSQL configuration
-│   ├── controllers/         # Business logic
-│   ├── routes/              # API routes
-│   ├── scripts/             # Database setup
-│   ├── tests/               # Test suite
-│   └── README.md
-└── start.sh                 # Quick start script
+src/
+├── components/           # Reusable UI components
+│   ├── Button.tsx       # Customizable button component
+│   ├── Header.tsx       # Application header with actions
+│   ├── Sidebar.tsx      # Navigation sidebar
+│   ├── Tabs.tsx         # Tab navigation component
+│   ├── ClassCard.tsx    # Class display card
+│   ├── Classes.tsx      # Classes page component
+│   ├── TodoSidebar.tsx  # Todo management sidebar
+│   └── index.ts         # Component exports
+├── App.tsx              # Main application component
+├── App.css              # Custom styles
+├── index.css            # Global styles with Tailwind
+└── index.tsx            # Application entry point
 ```
 
-## Quick Start
+## 🧩 Components
+
+### Core Components
+
+- **Button**: Flexible button component with multiple variants and sizes
+- **Header**: Application header with title, action buttons, and user profile
+- **Sidebar**: Navigation sidebar with menu items and mobile support
+- **Tabs**: Tab navigation component with different styling variants
+- **ClassCard**: Card component for displaying class information
+- **Classes**: Page component for managing and displaying classes
+- **TodoSidebar**: Collapsible sidebar for todo management
+
+### Component Features
+
+#### Button Component
+- Multiple variants: primary, secondary, outline, ghost
+- Different sizes: sm, md, lg
+- Icon support
+- Disabled state
+- Custom styling
+
+#### Header Component
+- Gradient background
+- Dynamic title
+- Action buttons (Add Class, Join Class)
+- Notification bell
+- User profile display
+
+#### Sidebar Component
+- Responsive design
+- Mobile menu support
+- Active state highlighting
+- Smooth animations
+
+#### Tabs Component
+- Multiple variants: default, pills, underline
+- Icon support
+- Active state management
+- Custom styling
+
+#### ClassCard Component
+- Class information display
+- Student and assignment counts
+- Action buttons (notifications, files)
+- Hover effects
+
+#### TodoSidebar Component
+- Collapsible design
+- Todo categorization (urgent, pending, completed)
+- Interactive todo items
+- Floating toggle button
+
+## 🎨 Styling
+
+- **Tailwind CSS**: Utility-first CSS framework
+- **Custom CSS**: Additional styles for specific components
+- **Responsive Design**: Mobile-first approach
+- **Smooth Animations**: CSS transitions and transforms
+- **Modern UI**: Clean, professional design
+
+## 🚀 Getting Started
 
 ### Prerequisites
+
 - Node.js (v14 or higher)
-- PostgreSQL (v12 or higher)
-- Python 3 (for frontend server)
+- npm or yarn
 
-### Option 1: Automated Setup
+### Installation
+
+1. Clone the repository:
 ```bash
-# Make the startup script executable
-chmod +x start.sh
-
-# Run the startup script
-./start.sh
+git clone <repository-url>
+cd TutoriAI
 ```
 
-### Option 2: Manual Setup
-
-#### 1. Backend Setup
+2. Install dependencies:
 ```bash
-cd backend
-
-# Install dependencies
 npm install
-
-# Set up environment variables
-cp env.example .env
-# Edit .env with your database credentials
-
-# Create PostgreSQL database
-createdb tutoriai_db
-
-# Initialize database
-npm run init-db
-
-# Run tests
-npm test
-
-# Start development server
-npm run dev
 ```
 
-#### 2. Frontend Setup
+3. Start the development server:
 ```bash
-cd frontend
-
-# Start frontend server (Python 3)
-python3 -m http.server 3000
+npm start
 ```
 
-#### 3. Access the Application
-- **Dashboard**: http://localhost:3000
-- **Backend API**: http://localhost:3001
-- **Whiteboard**: http://localhost:3000/whiteboard/[id]
+4. Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
 
-## Usage
+### Available Scripts
 
-### Dashboard Navigation
-1. **Home**: View greeting and quick actions
-2. **Meetings**: Manage upcoming meetings and RSVPs
-3. **Calendar**: View and navigate calendar events
-4. **Whiteboards**: Access your whiteboard collection
-5. **Insights**: View analytics and progress
+- `npm start`: Runs the app in development mode
+- `npm test`: Launches the test runner
+- `npm run build`: Builds the app for production
+- `npm run eject`: Ejects from Create React App (one-way operation)
 
-### Whiteboard Features
-1. **Create Whiteboard**: Click "Create New Whiteboard" button
-2. **Open Whiteboard**: Click "Open" on any whiteboard card
-3. **Edit Content**: Use toolbar tools to add elements
-4. **Save Automatically**: Content saves every 30 seconds
-5. **Share**: Use share button to collaborate with others
+## 📱 Responsive Design
 
-### Available Tools
-- **Select**: Move and select elements
-- **Text**: Add text elements
-- **Sticky Notes**: Create colored sticky notes
-- **Shapes**: Add geometric shapes
-- **Connectors**: Draw connecting lines
-- **Pen**: Freehand drawing
+The application is fully responsive and works on:
+- Desktop (1024px and above)
+- Tablet (768px - 1023px)
+- Mobile (below 768px)
 
-## API Endpoints
+## 🔧 Customization
 
-### Authentication
-- `POST /api/users/register` - Register new user
-- `POST /api/users/login` - User login
-- `GET /api/users/profile` - Get user profile
+### Adding New Components
 
-### Whiteboards
-- `GET /api/whiteboards` - List user's whiteboards
-- `GET /api/whiteboards/:id` - Get specific whiteboard
-- `POST /api/whiteboards` - Create new whiteboard
-- `PUT /api/whiteboards/:id` - Update whiteboard
-- `DELETE /api/whiteboards/:id` - Delete whiteboard
-- `PATCH /api/whiteboards/:id/content` - Update content
-- `POST /api/whiteboards/:id/share` - Share whiteboard
+1. Create a new component file in `src/components/`
+2. Export it from `src/components/index.ts`
+3. Import and use in your application
 
-## Testing
+### Styling
 
-### Backend Tests
-```bash
-cd backend
+- Use Tailwind CSS classes for styling
+- Add custom CSS in `src/App.css` for specific needs
+- Follow the existing design patterns
 
-# Run all tests
-npm test
+### Data Management
 
-# Run specific test file
-npm test -- whiteboard.test.js
+- Currently using local state with React hooks
+- Easy to integrate with external APIs or state management libraries
+- Sample data provided in `App.tsx`
 
-# Run with coverage
-npm test -- --coverage
+## 🎯 Future Enhancements
 
-# Run test suite with custom runner
-npm run test:run
-```
+- [ ] Add more page components (Assignments, Archived, Overview, Settings)
+- [ ] Implement state management (Redux, Zustand, or Context API)
+- [ ] Add authentication and user management
+- [ ] Integrate with backend APIs
+- [ ] Add real-time features with WebSockets
+- [ ] Implement dark mode
+- [ ] Add unit and integration tests
+- [ ] Performance optimizations
 
-### Test Coverage
-- **Unit Tests**: Individual function testing
-- **Integration Tests**: API endpoint testing
-- **Workflow Tests**: Complete user journey testing
-- **Error Handling**: Edge cases and error scenarios
-
-## Development
-
-### Adding New Features
-1. **Backend**: Add controllers, routes, and tests
-2. **Frontend**: Update HTML, CSS, and JavaScript
-3. **Database**: Create migration scripts if needed
-4. **Testing**: Add comprehensive tests
-
-### Code Structure
-- **Modular Design**: Features organized in separate directories
-- **Separation of Concerns**: Frontend and backend clearly separated
-- **RESTful API**: Clean, predictable API endpoints
-- **Error Handling**: Consistent error responses
-
-## Deployment
-
-### Production Setup
-1. **Environment Variables**: Configure production settings
-2. **Database**: Set up production PostgreSQL instance
-3. **Reverse Proxy**: Configure nginx for frontend serving
-4. **Process Management**: Use PM2 for Node.js processes
-5. **SSL**: Configure HTTPS certificates
-
-### Docker Support
-```dockerfile
-# Example Dockerfile for backend
-FROM node:16-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-EXPOSE 3001
-CMD ["npm", "start"]
-```
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests for new functionality
+4. Add tests if applicable
 5. Submit a pull request
 
-## License
+## 📄 License
 
-MIT License - see LICENSE file for details
+This project is licensed under the MIT License.
 
-## Support
+## 🆘 Support
 
-For issues and questions:
-- Check the documentation in each directory
-- Review the test files for usage examples
-- Open an issue on GitHub
-
----
-
-**TutoriAI** - Empowering collaboration through intelligent whiteboarding
-
+For support and questions, please open an issue in the repository.
