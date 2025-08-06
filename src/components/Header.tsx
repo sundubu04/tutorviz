@@ -1,14 +1,17 @@
 import React from 'react';
 import Button from './Button';
-import { Plus, LogIn, Bell, User } from 'lucide-react';
+import { Plus, LogIn, Bell, User, LogOut } from 'lucide-react';
 
 interface HeaderProps {
   title: string;
   onAddClass?: () => void;
   onJoinClass?: () => void;
   onNotifications?: () => void;
+  onLogout?: () => void;
   userName?: string;
   userAvatar?: string;
+  userRole?: string;
+  isAuthenticated?: boolean;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -16,8 +19,11 @@ const Header: React.FC<HeaderProps> = ({
   onAddClass,
   onJoinClass,
   onNotifications,
+  onLogout,
   userName = 'John',
-  userAvatar
+  userAvatar,
+  userRole,
+  isAuthenticated
 }) => {
   return (
     <header className="header">
@@ -32,7 +38,7 @@ const Header: React.FC<HeaderProps> = ({
               variant="primary"
               icon={<Plus className="w-4 h-4" />}
               onClick={onAddClass}
-              className="bg-white text-blue-600 hover:bg-gray-100"
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
             >
               Add Class
             </Button>
@@ -72,7 +78,21 @@ const Header: React.FC<HeaderProps> = ({
                   <User className="w-4 h-4" />
                 </div>
               )}
-              <span className="font-medium">{userName}</span>
+              <div className="flex flex-col">
+                <span className="font-medium text-sm">{userName}</span>
+                {userRole && (
+                  <span className="text-xs text-gray-300 capitalize">{userRole}</span>
+                )}
+              </div>
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="p-1 rounded hover:bg-white/20 transition-colors"
+                  title="Logout"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>

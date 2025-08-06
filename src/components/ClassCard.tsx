@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, Folder, Users, FileText, MoreVertical } from 'lucide-react';
+import { Bell, Folder, Users, FileText, MoreVertical, Edit, Trash2 } from 'lucide-react';
 
 interface ClassCardProps {
   id: string;
@@ -9,9 +9,10 @@ interface ClassCardProps {
   iconColor: string;
   studentCount: number;
   assignmentCount: number;
-  progress?: number;
   onNotificationToggle?: () => void;
   onFilesClick?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
   onClick?: () => void;
 }
 
@@ -23,17 +24,12 @@ const ClassCard: React.FC<ClassCardProps> = ({
   iconColor,
   studentCount,
   assignmentCount,
-  progress,
   onNotificationToggle,
   onFilesClick,
+  onEdit,
+  onDelete,
   onClick
 }) => {
-  const getProgressColor = (progress: number) => {
-    if (progress >= 80) return 'bg-green-500';
-    if (progress >= 60) return 'bg-blue-500';
-    if (progress >= 40) return 'bg-yellow-500';
-    return 'bg-red-500';
-  };
 
   return (
     <div 
@@ -69,38 +65,37 @@ const ClassCard: React.FC<ClassCardProps> = ({
               <Folder className="w-4 h-4 text-gray-600" />
             </button>
           )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              console.log('More options for:', name);
-            }}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100"
-            title="More options"
-          >
-            <MoreVertical className="w-4 h-4 text-gray-600" />
-          </button>
+          {onEdit && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              className="p-2 rounded-lg hover:bg-blue-100 transition-colors opacity-0 group-hover:opacity-100"
+              title="Edit class"
+            >
+              <Edit className="w-4 h-4 text-blue-600" />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="p-2 rounded-lg hover:bg-red-100 transition-colors opacity-0 group-hover:opacity-100"
+              title="Delete class"
+            >
+              <Trash2 className="w-4 h-4 text-red-600" />
+            </button>
+          )}
         </div>
       </div>
       
-      <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4 group-hover:text-blue-600 transition-colors">
         {name}
       </h3>
       <p className="text-gray-600 text-sm mb-4 line-clamp-2">{description}</p>
-      
-      {progress !== undefined && (
-        <div className="mb-4">
-          <div className="flex items-center justify-between text-sm mb-2">
-            <span className="text-gray-600">Progress</span>
-            <span className="font-medium text-gray-900">{progress}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(progress)}`}
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-      )}
       
       <div className="flex items-center justify-between text-sm text-gray-500">
         <div className="flex items-center space-x-1">

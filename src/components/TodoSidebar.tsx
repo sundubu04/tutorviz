@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, CheckCircle, Circle, Clock, BookOpen } from 'lucide-react';
-import { type TodoItem } from '../samples';
+import { type TodoItem } from '../types';
 
 interface TodoSidebarProps {
   todos: TodoItem[];

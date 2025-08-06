@@ -1,31 +1,93 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Classes from './components/Classes';
+import Calendar from './components/Calendar';
 import TodoSidebar from './components/TodoSidebar';
+import ClassModal from './components/ClassModal';
+import AuthWrapper from './components/AuthWrapper';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { 
   BookOpen, 
   FileText, 
   PlusSquare, 
   BarChart3, 
-  Settings
+  Settings,
+  Calendar as CalendarIcon
 } from 'lucide-react';
-import { sampleClasses, sampleTodos } from './samples';
+import { apiClient, type Class as ApiClass } from './utils/apiClient';
+import { createIconElement } from './utils/iconMapper';
+import { type Class, type TodoItem } from './types';
 import './App.css';
 
 const menuItems = [
   { id: 'classes', label: 'Classes', icon: <BookOpen className="w-5 h-5" /> },
+  { id: 'calendar', label: 'Calendar', icon: <CalendarIcon className="w-5 h-5" /> },
   { id: 'assignments', label: 'Assignments', icon: <FileText className="w-5 h-5" /> },
   { id: 'task-maker', label: 'Task Maker', icon: <PlusSquare className="w-5 h-5" /> },
   { id: 'overview', label: 'Overview', icon: <BarChart3 className="w-5 h-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> }
 ];
 
-function App() {
+function Dashboard() {
+  const { user, logout } = useAuth();
   const [activeMenuItem, setActiveMenuItem] = useState('classes');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isTodoSidebarOpen, setIsTodoSidebarOpen] = useState(false);
-  const [todos, setTodos] = useState(sampleTodos);
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isClassModalOpen, setIsClassModalOpen] = useState(false);
+  const [editingClass, setEditingClass] = useState<ApiClass | null>(null);
+
+  // Fetch classes and assignments on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch classes - use authenticated endpoint if user is logged in
+        let classesResponse;
+        if (apiClient.isAuthenticated()) {
+          classesResponse = await apiClient.getClasses();
+        } else {
+          // If not authenticated, still fetch classes but they'll have type 'public'
+          classesResponse = await apiClient.getClasses();
+        }
+        
+        const apiClasses = classesResponse.classes.map(apiClass => ({
+          ...apiClass,
+          icon: createIconElement(apiClass.iconName),
+          iconName: apiClass.iconName, // Preserve the iconName field
+          teacherName: apiClass.teacherName,
+          createdAt: apiClass.createdAt
+        }));
+        setClasses(apiClasses);
+
+        // Fetch assignments as todos
+        const assignmentsResponse = await apiClient.getAssignments();
+        const assignmentTodos: TodoItem[] = assignmentsResponse.assignments.map(assignment => ({
+          id: assignment.id,
+          title: assignment.title,
+          description: `Due ${new Date(assignment.dueDate).toLocaleDateString()}`,
+          completed: false, // TODO: Get actual completion status from API
+          dueDate: assignment.dueDate,
+          urgent: assignment.isUrgent,
+          class: assignment.className
+        }));
+        setTodos(assignmentTodos);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        // Set empty arrays on error
+        setClasses([]);
+        setTodos([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   const handleMenuItemClick = (itemId: string) => {
     setActiveMenuItem(itemId);
@@ -33,18 +95,87 @@ function App() {
   };
 
   const handleTodoToggle = (todoId: string) => {
-    setTodos(prev => prev.map(todo => 
+    setTodos((prev: TodoItem[]) => prev.map((todo: TodoItem) => 
       todo.id === todoId ? { ...todo, completed: !todo.completed } : todo
     ));
   };
 
   const handleTodoDelete = (todoId: string) => {
-    setTodos(prev => prev.filter(todo => todo.id !== todoId));
+    setTodos((prev: TodoItem[]) => prev.filter((todo: TodoItem) => todo.id !== todoId));
   };
 
   const handleAddClass = () => {
-    console.log('Add class clicked');
-    // TODO: Implement add class modal
+    if (!apiClient.isAuthenticated()) {
+      alert('You must be logged in to create classes. Please log in as a teacher.');
+      return;
+    }
+    
+    // Check if user is a teacher
+    if (user?.role !== 'teacher') {
+      alert('Only teachers can create classes. Please log in with a teacher account.');
+      return;
+    }
+    
+    setEditingClass(null);
+    setIsClassModalOpen(true);
+  };
+
+  const handleEditClass = (classData: Class) => {
+    // Convert Class type to ApiClass type for editing
+    const apiClass: ApiClass = {
+      id: classData.id,
+      name: classData.name,
+      description: classData.description,
+      iconName: classData.iconName, // Use the actual icon name from the class data
+      iconColor: classData.iconColor,
+      teacherName: classData.teacherName || 'Teacher', // Use existing teacher name if available
+      studentCount: classData.studentCount,
+      assignmentCount: classData.assignmentCount,
+      type: classData.type,
+      createdAt: classData.createdAt || new Date().toISOString() // Use existing createdAt if available
+    };
+    setEditingClass(apiClass);
+    setIsClassModalOpen(true);
+  };
+
+  const handleDeleteClass = async (classId: string) => {
+    if (!window.confirm('Are you sure you want to delete this class? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await apiClient.deleteClass(classId);
+      // Refresh classes after deletion
+      const classesResponse = await apiClient.getClasses();
+      const apiClasses = classesResponse.classes.map(apiClass => ({
+        ...apiClass,
+        icon: createIconElement(apiClass.iconName),
+        iconName: apiClass.iconName, // Preserve the iconName field
+        teacherName: apiClass.teacherName,
+        createdAt: apiClass.createdAt
+      }));
+      setClasses(apiClasses);
+    } catch (error) {
+      console.error('Error deleting class:', error);
+      alert('Failed to delete class. Please try again.');
+    }
+  };
+
+  const handleClassModalSave = async () => {
+    // Refresh classes after save
+    try {
+      const classesResponse = await apiClient.getClasses();
+      const apiClasses = classesResponse.classes.map(apiClass => ({
+        ...apiClass,
+        icon: createIconElement(apiClass.iconName),
+        iconName: apiClass.iconName, // Preserve the iconName field
+        teacherName: apiClass.teacherName,
+        createdAt: apiClass.createdAt
+      }));
+      setClasses(apiClasses);
+    } catch (error) {
+      console.error('Error refreshing classes:', error);
+    }
   };
 
   const handleJoinClass = () => {
@@ -58,16 +189,31 @@ function App() {
   };
 
   const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      );
+    }
+
     switch (activeMenuItem) {
       case 'classes':
         return (
           <Classes
-            classes={sampleClasses}
+            classes={classes}
             onClassClick={(classId) => console.log('Class clicked:', classId)}
             onNotificationToggle={(classId) => console.log('Notification toggled:', classId)}
             onFilesClick={(classId) => console.log('Files clicked:', classId)}
+            onEditClass={handleEditClass}
+            onDeleteClass={handleDeleteClass}
           />
         );
+      case 'calendar':
+        return <Calendar />;
       case 'assignments':
         return (
           <div className="text-center py-12">
@@ -110,7 +256,7 @@ function App() {
     return menuItem ? menuItem.label : 'Dashboard';
   };
 
-  const shouldShowHeaderActions = activeMenuItem === 'classes';
+  const shouldShowHeaderActions = activeMenuItem === 'classes' || activeMenuItem === 'calendar';
 
   return (
     <div className="dashboard-container">
@@ -128,7 +274,10 @@ function App() {
           onAddClass={shouldShowHeaderActions ? handleAddClass : undefined}
           onJoinClass={shouldShowHeaderActions ? handleJoinClass : undefined}
           onNotifications={handleNotifications}
-          userName="John Doe"
+          onLogout={logout}
+          userName={`${user?.firstName} ${user?.lastName}`}
+          userRole={user?.role}
+          isAuthenticated={apiClient.isAuthenticated()}
         />
         
         <div className="content-area">
@@ -143,7 +292,26 @@ function App() {
         onTodoToggle={handleTodoToggle}
         onTodoDelete={handleTodoDelete}
       />
+
+      <ClassModal
+        isOpen={isClassModalOpen}
+        classData={editingClass}
+        onClose={() => setIsClassModalOpen(false)}
+        onSave={handleClassModalSave}
+      />
+
+
     </div>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AuthWrapper>
+        <Dashboard />
+      </AuthWrapper>
+    </AuthProvider>
   );
 }
 

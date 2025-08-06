@@ -135,3 +135,52 @@ textarea:focus {
     display: none !important;
   }
 }
+
+/* Calendar styles */
+.calendar-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.calendar-container .grid {
+  display: grid;
+}
+
+.calendar-container .grid-cols-7 {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-container .min-h-\[120px\] {
+  min-height: 120px;
+}
+
+/* Calendar day hover effects */
+.calendar-container .grid > div:hover {
+  background-color: #f8fafc;
+}
+
+/* Calendar event hover effects */
+.calendar-container .text-xs.p-1.rounded.border.cursor-pointer:hover {
+  transform: scale(1.02);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Modal backdrop blur */
+.fixed.inset-0.bg-black.bg-opacity-50 {
+  backdrop-filter: blur(2px);
+}
+
+/* Calendar responsive design */
+@media (max-width: 768px) {
+  .calendar-container .grid-cols-7 {
+    grid-template-columns: repeat(7, 1fr);
+  }
+  
+  .calendar-container .min-h-\[120px\] {
+    min-height: 80px;
+  }
+  
+  .calendar-container .text-xs {
+    font-size: 10px;
+  }
+}
