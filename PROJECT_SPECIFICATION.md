@@ -70,44 +70,7 @@ A comprehensive web-based classroom management system designed to streamline edu
 - Multiple calendar views (day, week, month, agenda)
 - iCal export/import capabilities
 
-### 3. Interactive Whiteboard
-**Purpose**: Real-time collaborative digital whiteboard for virtual and hybrid learning environments.
-
-**Key Functionalities**:
-- **Drawing Tools**
-  - Multiple brush types and sizes
-  - Color palette and opacity controls
-  - Shape tools (rectangles, circles, lines, arrows)
-  - Text annotation with various fonts and sizes
-  - Eraser and undo/redo functionality
-
-- **Content Management**
-  - Image upload and embedding
-  - PDF document import
-  - Screenshot capture
-  - Template library for common educational diagrams
-
-- **Collaboration Features**
-  - Real-time multi-user editing
-  - User presence indicators
-  - Chat functionality
-  - Session recording and playback
-  - Export to various formats (PNG, PDF, SVG)
-
-- **Educational Tools**
-  - Mathematical equation editor
-  - Graph plotting capabilities
-  - Mind mapping tools
-  - Quiz and poll integration
-
-**Technical Requirements**:
-- WebSocket implementation for real-time collaboration
-- Canvas API or Fabric.js for drawing functionality
-- File upload and storage system
-- Session management and persistence
-- Mobile-responsive design
-
-### 4. Task Maker
+### 3. Task Maker
 **Purpose**: Comprehensive assignment and task creation system with progress tracking.
 
 **Key Functionalities**:
@@ -151,7 +114,6 @@ A comprehensive web-based classroom management system designed to streamline edu
 - **Framework**: React.js or Vue.js for component-based architecture
 - **Styling**: Tailwind CSS or Material-UI for responsive design
 - **State Management**: Redux or Vuex for global state
-- **Real-time**: Socket.io for live collaboration features
 - **Charts**: Chart.js or D3.js for analytics and visualizations
 
 ### Backend Technology Stack
@@ -160,7 +122,6 @@ A comprehensive web-based classroom management system designed to streamline edu
 - **Authentication**: JWT tokens with role-based access control
 - **File Storage**: AWS S3 or similar cloud storage
 - **Email Service**: SendGrid or AWS SES for notifications
-- **Real-time**: Socket.io server for WebSocket connections
 
 ### Database Schema Overview
 - **Users**: Teachers, students, administrators
@@ -168,7 +129,6 @@ A comprehensive web-based classroom management system designed to streamline edu
 - **Students**: Student profiles and academic records
 - **Assignments**: Task definitions and submissions
 - **Calendar**: Events and scheduling data
-- **Whiteboard**: Session data and saved boards
 - **Grades**: Assessment results and feedback
 
 ## User Roles and Permissions
@@ -177,13 +137,11 @@ A comprehensive web-based classroom management system designed to streamline edu
 - Full access to all features
 - Can create and manage classes
 - Can assign tasks and grade submissions
-- Can moderate whiteboard sessions
 - Can manage calendar events
 
 ### Student
 - View assigned tasks and due dates
 - Submit assignments
-- Participate in whiteboard sessions
 - View personal calendar and grades
 - Access class materials
 
@@ -236,11 +194,7 @@ A comprehensive web-based classroom management system designed to streamline edu
 - Grading interface
 - Progress tracking
 
-### Phase 5: Whiteboard (Weeks 17-20)
-- Drawing canvas implementation
-- Real-time collaboration
-- Session management
-- Export and sharing features
+
 
 ### Phase 6: Integration & Testing (Weeks 21-24)
 - Feature integration
@@ -260,7 +214,6 @@ A comprehensive web-based classroom management system designed to streamline edu
 - Advanced analytics and insights
 - Mobile application development
 - Third-party LMS integration
-- Virtual reality whiteboard support
 - Advanced assessment tools
 - Parent portal integration
 - Multi-language support

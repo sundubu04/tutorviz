@@ -2,20 +2,24 @@ import React, { useState } from 'react';
 import Tabs from './Tabs';
 import ClassCard from './ClassCard';
 import { Code } from 'lucide-react';
-import { type Class } from '../samples';
+import { type Class } from '../types';
 
 interface ClassesProps {
   classes: Class[];
   onClassClick?: (classId: string) => void;
   onNotificationToggle?: (classId: string) => void;
   onFilesClick?: (classId: string) => void;
+  onEditClass?: (classData: Class) => void;
+  onDeleteClass?: (classId: string) => void;
 }
 
 const Classes: React.FC<ClassesProps> = ({
   classes,
   onClassClick,
   onNotificationToggle,
-  onFilesClick
+  onFilesClick,
+  onEditClass,
+  onDeleteClass
 }) => {
   const [activeTab, setActiveTab] = useState('enrolled');
 
@@ -46,9 +50,10 @@ const Classes: React.FC<ClassesProps> = ({
             iconColor={cls.iconColor}
             studentCount={cls.studentCount}
             assignmentCount={cls.assignmentCount}
-            progress={cls.progress}
             onNotificationToggle={() => onNotificationToggle?.(cls.id)}
             onFilesClick={() => onFilesClick?.(cls.id)}
+            onEdit={() => onEditClass?.(cls)}
+            onDelete={() => onDeleteClass?.(cls.id)}
             onClick={() => onClassClick?.(cls.id)}
           />
         ))}

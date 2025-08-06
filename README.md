@@ -1,165 +1,235 @@
-# TutoriAI - Classroom Dashboard
+# TutoriAI - Classroom Management System
 
-A modern React-based classroom management web application built with TypeScript and Tailwind CSS.
+A comprehensive web-based classroom management system designed to streamline educational workflows for teachers and enhance learning experiences for students. The application provides an integrated platform for managing students, scheduling, collaborative whiteboarding, and task creation/management.
 
 ## 🚀 Features
 
-- **Modern React Architecture**: Built with React 18, TypeScript, and functional components
-- **Responsive Design**: Mobile-first approach with Tailwind CSS
-- **Component-Based**: Reusable components for maintainable code
-- **Interactive UI**: Smooth animations and transitions
-- **Type Safety**: Full TypeScript support for better development experience
+### Core Functionalities
+- **Student Manager**: Centralized student information and progress tracking
+- **Calendar System**: Comprehensive scheduling and event management
+- **Task Maker**: Comprehensive assignment and task creation system
+- **User Authentication**: JWT-based authentication with role-based access control
 
-## 📁 Project Structure
+### User Roles
+- **Teachers**: Full access to all features, can create/manage classes and assignments
+- **Students**: View assigned tasks, submit assignments, access enrolled classes
+- **Administrators**: User management and system configuration
 
-```
-src/
-├── components/           # Reusable UI components
-│   ├── Button.tsx       # Customizable button component
-│   ├── Header.tsx       # Application header with actions
-│   ├── Sidebar.tsx      # Navigation sidebar
-│   ├── Tabs.tsx         # Tab navigation component
-│   ├── ClassCard.tsx    # Class display card
-│   ├── Classes.tsx      # Classes page component
-│   ├── TodoSidebar.tsx  # Todo management sidebar
-│   └── index.ts         # Component exports
-├── App.tsx              # Main application component
-├── App.css              # Custom styles
-├── index.css            # Global styles with Tailwind
-└── index.tsx            # Application entry point
-```
+## 🛠 Tech Stack
 
-## 🧩 Components
+### Frontend
+- **Framework**: React.js with TypeScript
+- **Styling**: Tailwind CSS
+- **Icons**: Lucide React
+- **State Management**: React Hooks
 
-### Core Components
+### Backend
+- **Runtime**: Node.js
+- **Framework**: Express.js
+- **Database**: PostgreSQL
+- **Authentication**: JWT (jsonwebtoken)
+- **Password Hashing**: bcryptjs
+- **Validation**: express-validator
+- **Security**: helmet, express-rate-limit
 
-- **Button**: Flexible button component with multiple variants and sizes
-- **Header**: Application header with title, action buttons, and user profile
-- **Sidebar**: Navigation sidebar with menu items and mobile support
-- **Tabs**: Tab navigation component with different styling variants
-- **ClassCard**: Card component for displaying class information
-- **Classes**: Page component for managing and displaying classes
-- **TodoSidebar**: Collapsible sidebar for todo management
-
-### Component Features
-
-#### Button Component
-- Multiple variants: primary, secondary, outline, ghost
-- Different sizes: sm, md, lg
-- Icon support
-- Disabled state
-- Custom styling
-
-#### Header Component
-- Gradient background
-- Dynamic title
-- Action buttons (Add Class, Join Class)
-- Notification bell
-- User profile display
-
-#### Sidebar Component
-- Responsive design
-- Mobile menu support
-- Active state highlighting
-- Smooth animations
-
-#### Tabs Component
-- Multiple variants: default, pills, underline
-- Icon support
-- Active state management
-- Custom styling
-
-#### ClassCard Component
-- Class information display
-- Student and assignment counts
-- Action buttons (notifications, files)
-- Hover effects
-
-#### TodoSidebar Component
-- Collapsible design
-- Todo categorization (urgent, pending, completed)
-- Interactive todo items
-- Floating toggle button
-
-## 🎨 Styling
-
-- **Tailwind CSS**: Utility-first CSS framework
-- **Custom CSS**: Additional styles for specific components
-- **Responsive Design**: Mobile-first approach
-- **Smooth Animations**: CSS transitions and transforms
-- **Modern UI**: Clean, professional design
-
-## 🚀 Getting Started
-
-### Prerequisites
+## 📋 Prerequisites
 
 - Node.js (v14 or higher)
+- PostgreSQL (v12 or higher)
 - npm or yarn
 
-### Installation
+## 🚀 Quick Start
 
-1. Clone the repository:
+### 1. Clone the Repository
 ```bash
 git clone <repository-url>
 cd TutoriAI
 ```
 
-2. Install dependencies:
+### 2. Backend Setup
+
 ```bash
+# Navigate to backend directory
+cd backend
+
+# Install dependencies
 npm install
+
+# Set up environment variables
+cp env.example .env
 ```
 
-3. Start the development server:
+Edit the `.env` file with your configuration:
+```env
+PORT=5000
+NODE_ENV=development
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=tutoriai_db
+DB_USER=postgres
+DB_PASSWORD=your_password
+JWT_SECRET=your_jwt_secret_key_here
+JWT_EXPIRES_IN=24h
+CORS_ORIGIN=http://localhost:3000
+```
+
 ```bash
+# Set up PostgreSQL database
+createdb tutoriai_db
+
+# Initialize database and sample data
+npm run setup
+
+# Start the backend server
+npm run dev
+```
+
+### 3. Frontend Setup
+
+```bash
+# Navigate to frontend directory (root of project)
+cd ..
+
+# Install dependencies
+npm install
+
+# Start the frontend development server
 npm start
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+### 4. Verify Installation
 
-### Available Scripts
+The application should now be running at:
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:5000
 
-- `npm start`: Runs the app in development mode
-- `npm test`: Launches the test runner
-- `npm run build`: Builds the app for production
-- `npm run eject`: Ejects from Create React App (one-way operation)
+Test the API:
+```bash
+cd backend
+npm run test-api
+```
 
-## 📱 Responsive Design
+## 📊 Sample Data
 
-The application is fully responsive and works on:
-- Desktop (1024px and above)
-- Tablet (768px - 1023px)
-- Mobile (below 768px)
+The setup script creates sample data for testing:
 
-## 🔧 Customization
+### Users
+- **Teacher**: teacher@example.com (password: demo123)
+- **Student 1**: student1@example.com (password: demo123)
+- **Student 2**: student2@example.com (password: demo123)
 
-### Adding New Components
+### Sample Classes
+- Java Programming
+- Operating Systems
+- Python Development
+- C++ Programming
+- Database Systems
+- Web Development
 
-1. Create a new component file in `src/components/`
-2. Export it from `src/components/index.ts`
-3. Import and use in your application
+## 🔧 Development
 
-### Styling
+### Backend Development
 
-- Use Tailwind CSS classes for styling
-- Add custom CSS in `src/App.css` for specific needs
-- Follow the existing design patterns
+```bash
+cd backend
 
-### Data Management
+# Start development server with auto-reload
+npm run dev
 
-- Currently using local state with React hooks
-- Easy to integrate with external APIs or state management libraries
-- Sample data provided in `App.tsx`
+# Run database migrations
+npm run migrate
 
-## 🎯 Future Enhancements
+# Test API endpoints
+npm run test-api
 
-- [ ] Add more page components (Assignments, Archived, Overview, Settings)
-- [ ] Implement state management (Redux, Zustand, or Context API)
-- [ ] Add authentication and user management
-- [ ] Integrate with backend APIs
-- [ ] Add real-time features with WebSockets
-- [ ] Implement dark mode
-- [ ] Add unit and integration tests
-- [ ] Performance optimizations
+# Run tests
+npm test
+```
+
+### Frontend Development
+
+```bash
+# Start development server
+npm start
+
+# Build for production
+npm run build
+
+# Run tests
+npm test
+```
+
+## 📚 API Documentation
+
+### Authentication Endpoints
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - User login
+- `GET /api/auth/profile` - Get current user profile
+- `PUT /api/auth/profile` - Update user profile
+
+### Class Management
+- `GET /api/classes` - Get all classes for current user
+- `POST /api/classes` - Create new class (teachers)
+- `PUT /api/classes/:id` - Update class
+- `DELETE /api/classes/:id` - Delete class
+
+### Assignment System
+- `GET /api/assignments` - Get all assignments
+- `POST /api/assignments` - Create new assignment (teachers)
+- `POST /api/assignments/:id/submit` - Submit assignment (students)
+- `PUT /api/assignments/:id/grade/:submissionId` - Grade assignment (teachers)
+
+### Calendar & Events
+- `GET /api/calendar` - Get calendar events
+- `POST /api/calendar` - Create new event
+- `PUT /api/calendar/:id` - Update event
+
+
+
+## 🗄 Database Schema
+
+The application uses PostgreSQL with the following main tables:
+
+- **users**: User accounts and profiles
+- **classes**: Class information and enrollments
+- **assignments**: Task definitions and submissions
+- **calendar_events**: Events and scheduling data
+
+## 🔒 Security Features
+
+- JWT token authentication
+- Password hashing with bcrypt
+- Input validation and sanitization
+- Rate limiting
+- Security headers with helmet
+- CORS configuration
+- SQL injection prevention
+
+## 🧪 Testing
+
+### Backend Tests
+```bash
+cd backend
+npm test
+npm run test-api
+```
+
+### Frontend Tests
+```bash
+npm test
+```
+
+## 📦 Deployment
+
+### Backend Deployment
+1. Set up PostgreSQL database
+2. Configure environment variables
+3. Run database migrations
+4. Start the server with `npm start`
+
+### Frontend Deployment
+1. Build the application: `npm run build`
+2. Deploy the `build` folder to your web server
 
 ## 🤝 Contributing
 
@@ -171,8 +241,19 @@ The application is fully responsive and works on:
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+MIT License
 
 ## 🆘 Support
 
-For support and questions, please open an issue in the repository.
+For support and questions:
+- Check the documentation in the `backend/README.md` and `PROJECT_SPECIFICATION.md`
+- Review the API documentation
+- Test the sample endpoints with the provided credentials
+
+## 🎯 Roadmap
+
+- [ ] Mobile application
+- [ ] Advanced analytics and reporting
+- [ ] Third-party LMS integration
+- [ ] AI-powered grading assistance
+- [ ] Parent portal integration
