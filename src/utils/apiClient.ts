@@ -44,7 +44,7 @@ export interface Assignment {
   title: string;
   description: string;
   dueDate: string;
-  isUrgent: boolean;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
   className: string;
   classId: string;
   submissionCount?: number;
@@ -52,6 +52,16 @@ export interface Assignment {
   submittedAt?: string;
   grade?: number;
   createdAt: string;
+  topic?: string;
+  attachments?: Array<{
+    id: string;
+    name: string;
+    url: string;
+    size: number;
+    type: string;
+    uploadedAt: string;
+  }>;
+  assignedStudents?: string[];
 }
 
 export interface CalendarEvent {
@@ -203,6 +213,23 @@ class ApiClient {
     });
   }
 
+  // Get students for a class
+  async getClassStudents(classId: string): Promise<{ students: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    avatarUrl?: string;
+  }> }> {
+    return this.request<{ students: Array<{
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+      avatarUrl?: string;
+    }> }>(`/classes/${classId}/students`);
+  }
+
   // Assignment methods
   async getAssignments(): Promise<{ assignments: Assignment[] }> {
     return this.request<{ assignments: Assignment[] }>('/assignments');
@@ -221,7 +248,10 @@ class ApiClient {
     description?: string;
     classId: string;
     dueDate: string;
-    isUrgent?: boolean;
+    priority?: 'low' | 'normal' | 'high' | 'urgent';
+    topic?: string;
+    assignedStudents?: string[];
+    attachments?: File[];
   }): Promise<{ assignment: Assignment }> {
     return this.request<{ assignment: Assignment }>('/assignments', {
       method: 'POST',
@@ -365,6 +395,170 @@ class ApiClient {
   // Get current token
   getToken(): string | null {
     return this.token;
+  }
+
+  // Upload assignment attachment
+  async uploadAssignmentAttachment(assignmentId: string, file: File): Promise<{ attachment: any }> {
+    /*
+     * FILE STORAGE SERVICE SPECIFICATIONS
+     * 
+     * CHOOSING A STORAGE SERVICE:
+     * 
+     * 1. AWS S3 (Recommended for production)
+     *    - Pros: Highly scalable, reliable, cost-effective for large files
+     *    - Cons: More complex setup, requires AWS knowledge
+     *    - Best for: Large-scale applications, enterprise use
+     *    - Cost: ~$0.023 per GB/month + transfer costs
+     *    - Setup: Create S3 bucket, configure CORS, set up IAM roles
+     * 
+     * 2. Cloudinary (Recommended for ease of use)
+     *    - Pros: Easy setup, built-in image optimization, generous free tier
+     *    - Cons: Can be expensive for high volume, vendor lock-in
+     *    - Best for: Small to medium applications, quick prototyping
+     *    - Cost: Free tier (25GB storage, 25GB bandwidth), then $89/month
+     *    - Setup: Sign up, get API keys, configure upload presets
+     * 
+     * 3. Firebase Storage (Good for Google ecosystem)
+     *    - Pros: Easy integration with other Firebase services, good security
+     *    - Cons: Limited to Google ecosystem, can be expensive
+     *    - Best for: Applications using other Firebase services
+     *    - Cost: Free tier (5GB storage, 1GB/day transfer), then pay-as-you-go
+     *    - Setup: Create Firebase project, enable Storage, configure rules
+     * 
+     * 4. Supabase Storage (Good for PostgreSQL users)
+     *    - Pros: Built-in with Supabase, PostgreSQL integration, Row Level Security
+     *    - Cons: Limited to Supabase ecosystem
+     *    - Best for: Applications using Supabase as backend
+     *    - Cost: Free tier (1GB storage), then $25/month
+     *    - Setup: Enable Storage in Supabase dashboard
+     * 
+     * 5. Local Storage (Development only)
+     *    - Pros: Simple, no external dependencies
+     *    - Cons: Not scalable, files lost on server restart
+     *    - Best for: Development and testing only
+     *    - Cost: Free
+     *    - Setup: Create uploads directory, configure Express static serving
+     * 
+     * RECOMMENDED IMPLEMENTATION STEPS:
+     * 
+     * 1. For Development/Testing:
+     *    - Use local storage with Express static serving
+     *    - Create /uploads directory in backend
+     *    - Configure multer for file handling
+     * 
+     * 2. For Production (Small to Medium):
+     *    - Start with Cloudinary for simplicity
+     *    - Easy setup, good documentation, reliable service
+     * 
+     * 3. For Production (Large Scale):
+     *    - Use AWS S3 with CloudFront CDN
+     *    - More control, better cost optimization, enterprise features
+     * 
+     * SECURITY CONSIDERATIONS:
+     * 
+     * 1. File Type Validation:
+     *    - Whitelist allowed file types (PDF, DOC, images, etc.)
+     *    - Check file extensions and MIME types
+     *    - Scan for malware (optional but recommended)
+     * 
+     * 2. File Size Limits:
+     *    - Set reasonable limits (e.g., 10MB per file)
+     *    - Implement client and server-side validation
+     * 
+     * 3. Access Control:
+     *    - Implement proper authentication for uploads
+     *    - Use signed URLs for secure file access
+     *    - Set up proper CORS policies
+     * 
+     * 4. File Organization:
+     *    - Use unique file names to prevent conflicts
+     *    - Organize files by assignment/user/date
+     *    - Implement file cleanup for deleted assignments
+     * 
+     * IMPLEMENTATION EXAMPLE (Cloudinary):
+     * 
+     * ```javascript
+     * // 1. Install: npm install cloudinary multer
+     * 
+     * // 2. Backend setup (backend/src/routes/assignments.js):
+     * const cloudinary = require('cloudinary').v2;
+     * const multer = require('multer');
+     * 
+     * cloudinary.config({
+     *   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+     *   api_key: process.env.CLOUDINARY_API_KEY,
+     *   api_secret: process.env.CLOUDINARY_API_SECRET
+     * });
+     * 
+     * const upload = multer({ storage: multer.memoryStorage() });
+     * 
+     * // 3. Upload endpoint:
+     * router.post('/:id/attachments', upload.single('file'), async (req, res) => {
+     *   try {
+     *     const result = await cloudinary.uploader.upload_stream({
+     *       resource_type: 'auto',
+     *       folder: 'assignments'
+     *     }, (error, result) => {
+     *       if (error) throw error;
+     *       
+     *       // Save to database
+     *       await pool.query(
+     *         'INSERT INTO assignment_attachments (assignment_id, file_name, file_url, file_size, file_type) VALUES ($1, $2, $3, $4, $5)',
+     *         [req.params.id, req.file.originalname, result.secure_url, req.file.size, req.file.mimetype]
+     *       );
+     *       
+     *       res.json({ attachment: result });
+     *     }).end(req.file.buffer);
+     *   } catch (error) {
+     *     res.status(500).json({ error: 'Upload failed' });
+     *   }
+     * });
+     * 
+     * // 4. Frontend implementation:
+     * const formData = new FormData();
+     * formData.append('file', file);
+     * 
+     * const response = await fetch(`/api/assignments/${assignmentId}/attachments`, {
+     *   method: 'POST',
+     *   headers: { 'Authorization': `Bearer ${token}` },
+     *   body: formData
+     * });
+     * ```
+     */
+    
+    // For now, we'll simulate file upload
+    // In a real implementation, you would:
+    // 1. Upload file to storage service (AWS S3, Cloudinary, etc.)
+    // 2. Get the file URL
+    // 3. Save the attachment record to the database
+    
+    console.log(`📎 [API] Simulating file upload: ${file.name} (${file.size} bytes)`);
+    
+    // Simulate upload delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Simulate successful upload
+    const mockAttachment = {
+      id: `att_${Date.now()}`,
+      name: file.name,
+      url: `https://example.com/uploads/${file.name}`,
+      size: file.size,
+      type: file.type,
+      uploadedAt: new Date().toISOString()
+    };
+    
+    // TODO: Replace with actual backend call
+    // return this.request<{ attachment: any }>(`/assignments/${assignmentId}/attachments`, {
+    //   method: 'POST',
+    //   body: JSON.stringify({
+    //     fileName: file.name,
+    //     fileUrl: uploadedFileUrl, // From storage service
+    //     fileSize: file.size,
+    //     fileType: file.type
+    //   })
+    // });
+    
+    return { attachment: mockAttachment };
   }
 }
 

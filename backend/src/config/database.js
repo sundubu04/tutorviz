@@ -87,9 +87,34 @@ const createTables = async () => {
         class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
         due_date TIMESTAMP NOT NULL,
         created_by UUID REFERENCES users(id) ON DELETE CASCADE,
-        is_urgent BOOLEAN DEFAULT FALSE,
+        priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
+        topic VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Assignment attachments table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS assignment_attachments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
+        file_name VARCHAR(255) NOT NULL,
+        file_url VARCHAR(500) NOT NULL,
+        file_size INTEGER NOT NULL,
+        file_type VARCHAR(100) NOT NULL,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Assignment student assignments table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS assignment_student_assignments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
+        student_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(assignment_id, student_id)
       )
     `);
 
@@ -138,34 +163,72 @@ const createTables = async () => {
     }
 
 
-
-    // Ensure class_id column exists with proper foreign key
-    try {
-      // Check if class_id column exists
-      const columnCheck = await pool.query(`
-        SELECT column_name, data_type 
-        FROM information_schema.columns 
-        WHERE table_name = 'calendar_events' AND column_name = 'class_id'
-      `);
-      
-      if (columnCheck.rows.length === 0) {
-        // class_id doesn't exist, add it
-        await pool.query(`
-          ALTER TABLE calendar_events 
-          ADD COLUMN class_id UUID REFERENCES classes(id) ON DELETE SET NULL
-        `);
-        console.log('Added class_id column with foreign key constraint');
-      } else {
-        console.log('class_id column already exists');
-      }
-    } catch (error) {
-      console.log('Class column check completed:', error.message);
-    }
-
-
     console.log('Database tables created successfully');
   } catch (error) {
     console.error('Error creating database tables:', error);
+    throw error;
+  }
+};
+
+// Migration function to update existing assignments table
+const migrateAssignmentsTable = async () => {
+  try {
+    // Check if is_urgent column exists
+    const columnCheck = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'assignments' AND column_name = 'is_urgent'
+    `);
+    
+    if (columnCheck.rows.length > 0) {
+      // Add priority column if it doesn't exist
+      try {
+        await pool.query(`
+          ALTER TABLE assignments 
+          ADD COLUMN priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent'))
+        `);
+        console.log('Added priority column to assignments table');
+      } catch (error) {
+        console.log('Priority column might already exist');
+      }
+
+      // Add topic column if it doesn't exist
+      try {
+        await pool.query(`
+          ALTER TABLE assignments 
+          ADD COLUMN topic VARCHAR(255)
+        `);
+        console.log('Added topic column to assignments table');
+      } catch (error) {
+        console.log('Topic column might already exist');
+      }
+
+      // Migrate existing is_urgent data to priority
+      await pool.query(`
+        UPDATE assignments 
+        SET priority = CASE 
+          WHEN is_urgent = true THEN 'urgent' 
+          ELSE 'normal' 
+        END 
+        WHERE priority IS NULL
+      `);
+      console.log('Migrated is_urgent data to priority');
+
+      // Remove is_urgent column
+      try {
+        await pool.query(`
+          ALTER TABLE assignments 
+          DROP COLUMN is_urgent
+        `);
+        console.log('Removed is_urgent column from assignments table');
+      } catch (error) {
+        console.log('is_urgent column might already be removed');
+      }
+    }
+
+    console.log('Assignments table migration completed');
+  } catch (error) {
+    console.error('Error migrating assignments table:', error);
     throw error;
   }
 };
@@ -176,6 +239,7 @@ const createTables = async () => {
 const initializeDatabase = async () => {
   try {
     await createTables();
+    await migrateAssignmentsTable();
     // Sample data insertion removed - database will be empty
     console.log('Database initialization completed');
   } catch (error) {
@@ -187,5 +251,6 @@ const initializeDatabase = async () => {
 module.exports = {
   pool,
   initializeDatabase,
-  createTables
+  createTables,
+  migrateAssignmentsTable
 }; 
