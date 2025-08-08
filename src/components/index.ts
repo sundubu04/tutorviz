@@ -11,4 +11,6 @@ export { default as Register } from './Register';
 export { default as AuthWrapper } from './AuthWrapper';
 export { default as Calendar } from './Calendar';
 export { default as EventModal } from './EventModal';
-export { default as EventDetailModal } from './EventDetailModal'; 
+export { default as EventDetailModal } from './EventDetailModal';
+export { default as Assignments } from './Assignments';
+export { default as AssignmentModal } from './AssignmentModal'; 

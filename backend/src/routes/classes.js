@@ -529,4 +529,41 @@ router.delete('/:id/enroll/:studentId', authenticateToken, requireRole(['teacher
   }
 });
 
+// Get students for a class (teachers only)
+router.get('/:id/students', authenticateToken, requireRole(['teacher']), requireOwnership('classes', 'id', 'teacher_id'), async (req, res) => {
+  console.log(`👥 [CLASSES] GET /${req.params.id}/students - User: ${req.user.first_name} ${req.user.last_name} (${req.user.role})`);
+  
+  try {
+    const { id: classId } = req.params;
+
+    const result = await pool.query(`
+      SELECT 
+        u.id, u.first_name, u.last_name, u.email, u.avatar_url,
+        ce.enrolled_at
+      FROM users u
+      INNER JOIN class_enrollments ce ON u.id = ce.student_id
+      WHERE ce.class_id = $1 AND u.role = 'student'
+      ORDER BY u.first_name, u.last_name
+    `, [classId]);
+
+    const students = result.rows.map(row => ({
+      id: row.id,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      email: row.email,
+      avatarUrl: row.avatar_url,
+      enrolledAt: row.enrolled_at
+    }));
+
+    console.log(`✅ [CLASSES] GET /${classId}/students - Success: Found ${students.length} students`);
+    res.json({ students });
+  } catch (error) {
+    console.error(`❌ [CLASSES] GET /${req.params.id}/students - Error:`, error.message);
+    res.status(500).json({ 
+      error: 'Students fetch failed',
+      message: 'An error occurred while fetching students'
+    });
+  }
+});
+
 module.exports = router; 
