@@ -1,16 +1,3 @@
-export { default as Button } from './Button';
-export { default as Header } from './Header';
-export { default as Sidebar } from './Sidebar';
-export { default as Tabs } from './Tabs';
-export { default as ClassCard } from './ClassCard';
-export { default as ClassModal } from './ClassModal';
-export { default as Classes } from './Classes';
-export { default as TodoSidebar } from './TodoSidebar';
-export { default as Login } from './Login';
-export { default as Register } from './Register';
-export { default as AuthWrapper } from './AuthWrapper';
-export { default as Calendar } from './Calendar';
-export { default as EventModal } from './EventModal';
-export { default as EventDetailModal } from './EventDetailModal';
-export { default as Assignments } from './Assignments';
-export { default as AssignmentModal } from './AssignmentModal'; 
+// Re-export from organized structure
+export * from './ui';
+export * from './layout'; 

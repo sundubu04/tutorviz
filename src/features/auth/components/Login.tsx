@@ -1,19 +1,21 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Mail, Lock, BookOpen } from 'lucide-react';
-import Button from './Button';
+import { Eye, EyeOff, Mail, Lock, BookOpen, AlertCircle } from 'lucide-react';
+import { Button } from '../../../components/ui';
 
 interface LoginProps {
   onLogin: (email: string, password: string) => void;
   onSwitchToRegister: () => void;
   isLoading?: boolean;
   error?: string | null;
+  clearError?: () => void;
 }
 
 const Login: React.FC<LoginProps> = ({ 
   onLogin, 
   onSwitchToRegister, 
   isLoading = false, 
-  error 
+  error,
+  clearError
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,12 +41,42 @@ const Login: React.FC<LoginProps> = ({
     return Object.keys(errors).length === 0;
   };
 
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEmail(e.target.value);
+    // Clear backend error when user starts typing
+    if (clearError) {
+      clearError();
+    }
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
+    // Clear backend error when user starts typing
+    if (clearError) {
+      clearError();
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     if (validateForm()) {
       onLogin(email, password);
     }
+  };
+
+  // Helper function to get user-friendly error message
+  const getErrorMessage = (error: string): string => {
+    if (error.includes('Invalid credentials') || error.includes('Email or password is incorrect')) {
+      return 'Invalid email or password. Please try again.';
+    }
+    if (error.includes('Validation failed')) {
+      return 'Please check your input and try again.';
+    }
+    if (error.includes('Login failed')) {
+      return 'Unable to sign in. Please try again later.';
+    }
+    return error;
   };
 
   return (
@@ -82,9 +114,9 @@ const Login: React.FC<LoginProps> = ({
                   autoComplete="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={handleEmailChange}
                   className={`appearance-none relative block w-full pl-10 pr-3 py-3 border rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                    formErrors.email ? 'border-red-300' : 'border-gray-300'
+                    formErrors.email || error ? 'border-red-300' : 'border-gray-300'
                   }`}
                   placeholder="Enter your email"
                 />
@@ -110,9 +142,9 @@ const Login: React.FC<LoginProps> = ({
                   autoComplete="current-password"
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={handlePasswordChange}
                   className={`appearance-none relative block w-full pl-10 pr-12 py-3 border rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                    formErrors.password ? 'border-red-300' : 'border-gray-300'
+                    formErrors.password || error ? 'border-red-300' : 'border-gray-300'
                   }`}
                   placeholder="Enter your password"
                 />
@@ -133,10 +165,11 @@ const Login: React.FC<LoginProps> = ({
               )}
             </div>
 
-            {/* Error Message */}
+            {/* Subtle Error Message */}
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-600">{error}</p>
+              <div className="flex items-center space-x-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span>{getErrorMessage(error)}</span>
               </div>
             )}
 

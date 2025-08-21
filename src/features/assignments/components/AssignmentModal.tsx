@@ -10,9 +10,9 @@ import {
   Plus,
   Trash2
 } from 'lucide-react';
-import { apiClient, type Class as ApiClass } from '../utils/apiClient';
-import { type Assignment, type Class, type Student, type CreateAssignmentData } from '../types';
-import Button from './Button';
+import { apiClient, type Class as ApiClass } from '../../../utils/apiClient';
+import { type Assignment, type Class, type Student, type CreateAssignmentData } from '../../../types';
+import { Button } from '../../../components/ui';
 
 interface AssignmentModalProps {
   isOpen: boolean;
@@ -47,6 +47,9 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      console.log('Modal opened with assignment:', assignment);
+      console.log('Is editing:', isEditing);
+      
       if (assignment) {
         // Editing existing assignment
         let formattedDueDate = '';
@@ -75,7 +78,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
           formattedDueDate = '';
         }
 
-        setFormData({
+        const formDataToSet = {
           title: assignment.title,
           description: assignment.description || '',
           classId: assignment.classId,
@@ -84,7 +87,10 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
           topic: assignment.topic || '',
           assignedStudents: assignment.assignedStudents || [],
           attachments: []
-        });
+        };
+        
+        console.log('Setting form data for editing:', formDataToSet);
+        setFormData(formDataToSet);
       } else {
         // Creating new assignment
         setFormData({
@@ -232,7 +238,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
       }
 
       if (isEditing && assignment) {
-        await apiClient.updateAssignment(assignment.id, {
+        console.log('Updating assignment with data:', {
           title: formData.title,
           description: formData.description,
           dueDate: new Date(formData.dueDate + 'T12:00:00Z').toISOString(),
@@ -240,6 +246,17 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
           topic: formData.topic,
           assignedStudents: formData.assignedStudents
         });
+
+        const result = await apiClient.updateAssignment(assignment.id, {
+          title: formData.title,
+          description: formData.description,
+          dueDate: new Date(formData.dueDate + 'T12:00:00Z').toISOString(),
+          priority: formData.priority,
+          topic: formData.topic,
+          assignedStudents: formData.assignedStudents
+        });
+
+        console.log('Assignment update result:', result);
 
         // Upload new attachments for existing assignment
         if (formData.attachments.length > 0) {
@@ -254,6 +271,16 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
           }
         }
       } else {
+        console.log('Creating new assignment with data:', {
+          title: formData.title,
+          description: formData.description,
+          classId: formData.classId,
+          dueDate: new Date(formData.dueDate + 'T12:00:00Z').toISOString(),
+          priority: formData.priority,
+          topic: formData.topic,
+          assignedStudents: formData.assignedStudents
+        });
+
         const result = await apiClient.createAssignment({
           title: formData.title,
           description: formData.description,
@@ -263,6 +290,8 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
           topic: formData.topic,
           assignedStudents: formData.assignedStudents
         });
+
+        console.log('Assignment creation result:', result);
 
         // After creating the assignment, upload attachments if any
         if (formData.attachments.length > 0 && result.assignment) {

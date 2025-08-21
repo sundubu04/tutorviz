@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, BookOpen, Code, Monitor, FileCode, Cpu, Database, Globe, Calculator, Palette, Music, Camera, Heart, Zap, Star, Target } from 'lucide-react';
-import { apiClient, Class } from '../utils/apiClient';
-import Button from './Button';
+import { X } from 'lucide-react';
+import { apiClient, Class } from '../../../utils/apiClient';
+import { ICONS, type IconName } from '../../../utils/iconMapper';
+import { Button } from '../../../components/ui';
 
 interface ClassModalProps {
   isOpen: boolean;
@@ -20,27 +21,24 @@ const ClassModal: React.FC<ClassModalProps> = ({ isOpen, classData, onClose, onS
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const iconOptions = [
-    { name: 'BookOpen', icon: BookOpen, color: 'bg-blue-500' },
-    { name: 'Code', icon: Code, color: 'bg-orange-500' },
-    { name: 'Monitor', icon: Monitor, color: 'bg-purple-500' },
-    { name: 'FileCode', icon: FileCode, color: 'bg-green-500' },
-    { name: 'Cpu', icon: Cpu, color: 'bg-indigo-500' },
-    { name: 'Database', icon: Database, color: 'bg-red-500' },
-    { name: 'Globe', icon: Globe, color: 'bg-teal-500' },
-    { name: 'Calculator', icon: Calculator, color: 'bg-yellow-500' },
-    { name: 'Palette', icon: Palette, color: 'bg-pink-500' },
-    { name: 'Music', icon: Music, color: 'bg-emerald-500' },
-    { name: 'Camera', icon: Camera, color: 'bg-cyan-500' },
-    { name: 'Heart', icon: Heart, color: 'bg-rose-500' },
-    { name: 'Zap', icon: Zap, color: 'bg-amber-500' },
-    { name: 'Star', icon: Star, color: 'bg-violet-500' },
-    { name: 'Target', icon: Target, color: 'bg-slate-500' }
-  ];
+  const iconOptions = Object.entries(ICONS).map(([name, icon], index) => {
+    const colors = [
+      'bg-blue-500', 'bg-orange-500', 'bg-purple-500', 'bg-green-500', 
+      'bg-indigo-500', 'bg-red-500', 'bg-teal-500', 'bg-yellow-500',
+      'bg-pink-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-rose-500',
+      'bg-amber-500', 'bg-violet-500', 'bg-slate-500'
+    ];
+    return {
+      name: name as IconName,
+      icon,
+      color: colors[index % colors.length]
+    };
+  });
 
+  // Color options for icon selection
   const colorOptions = [
-    'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 
-    'bg-red-500', 'bg-indigo-500', 'bg-teal-500', 'bg-yellow-500',
+    'bg-blue-500', 'bg-orange-500', 'bg-purple-500', 'bg-green-500', 
+    'bg-indigo-500', 'bg-red-500', 'bg-teal-500', 'bg-yellow-500',
     'bg-pink-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-rose-500',
     'bg-amber-500', 'bg-violet-500', 'bg-slate-500'
   ];

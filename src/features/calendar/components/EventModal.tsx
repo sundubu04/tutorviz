@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { apiClient, CalendarEvent } from '../utils/apiClient';
-import { useAuth } from '../contexts/AuthContext';
+import { apiClient, CalendarEvent } from '../../../utils/apiClient';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface EventModalProps {
   isOpen: boolean;

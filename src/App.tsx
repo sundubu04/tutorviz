@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import Sidebar from './components/Sidebar';
-import Header from './components/Header';
-import Classes from './components/Classes';
-import Calendar from './components/Calendar';
-import Assignments from './components/Assignments';
-import TodoSidebar from './components/TodoSidebar';
-import ClassModal from './components/ClassModal';
-import AuthWrapper from './components/AuthWrapper';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Sidebar, Header } from './components/layout';
+import { Classes, ClassModal } from './features/classes';
+import { Calendar } from './features/calendar';
+import { Assignments } from './features/assignments';
+import { TodoSidebar } from './features/todos';
+import { TaskMakerPage } from './pages';
+import { AuthWrapper } from './features/auth';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { 
   BookOpen, 
@@ -32,6 +32,7 @@ const menuItems = [
 
 function Dashboard() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [activeMenuItem, setActiveMenuItem] = useState('classes');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isTodoSidebarOpen, setIsTodoSidebarOpen] = useState(false);
@@ -40,57 +41,64 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ApiClass | null>(null);
+  const [calendarRefreshKey, setCalendarRefreshKey] = useState(0); // Key to force calendar refresh
+
+  // Fetch classes and assignments
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch classes - use authenticated endpoint if user is logged in
+      let classesResponse;
+      if (apiClient.isAuthenticated()) {
+        classesResponse = await apiClient.getClasses();
+      } else {
+        // If not authenticated, still fetch classes but they'll have type 'public'
+        classesResponse = await apiClient.getClasses();
+      }
+      
+      const apiClasses = classesResponse.classes.map(apiClass => ({
+        ...apiClass,
+        icon: createIconElement(apiClass.iconName),
+        iconName: apiClass.iconName, // Preserve the iconName field
+        teacherName: apiClass.teacherName,
+        createdAt: apiClass.createdAt
+      }));
+      setClasses(apiClasses);
+
+      // Fetch assignments as todos
+      const assignmentsResponse = await apiClient.getAssignments();
+      const assignmentTodos: TodoItem[] = assignmentsResponse.assignments.map(assignment => ({
+        id: assignment.id,
+        title: assignment.title,
+        description: `Due ${new Date(assignment.dueDate).toLocaleDateString()}`,
+        completed: false, // TODO: Get actual completion status from API
+        dueDate: assignment.dueDate,
+        urgent: assignment.priority === 'urgent' || assignment.priority === 'high',
+        class: assignment.className
+      }));
+      setTodos(assignmentTodos);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      // Set empty arrays on error
+      setClasses([]);
+      setTodos([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Fetch classes and assignments on component mount
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        
-        // Fetch classes - use authenticated endpoint if user is logged in
-        let classesResponse;
-        if (apiClient.isAuthenticated()) {
-          classesResponse = await apiClient.getClasses();
-        } else {
-          // If not authenticated, still fetch classes but they'll have type 'public'
-          classesResponse = await apiClient.getClasses();
-        }
-        
-        const apiClasses = classesResponse.classes.map(apiClass => ({
-          ...apiClass,
-          icon: createIconElement(apiClass.iconName),
-          iconName: apiClass.iconName, // Preserve the iconName field
-          teacherName: apiClass.teacherName,
-          createdAt: apiClass.createdAt
-        }));
-        setClasses(apiClasses);
-
-        // Fetch assignments as todos
-        const assignmentsResponse = await apiClient.getAssignments();
-        const assignmentTodos: TodoItem[] = assignmentsResponse.assignments.map(assignment => ({
-          id: assignment.id,
-          title: assignment.title,
-          description: `Due ${new Date(assignment.dueDate).toLocaleDateString()}`,
-          completed: false, // TODO: Get actual completion status from API
-          dueDate: assignment.dueDate,
-          urgent: assignment.priority === 'urgent' || assignment.priority === 'high',
-          class: assignment.className
-        }));
-        setTodos(assignmentTodos);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        // Set empty arrays on error
-        setClasses([]);
-        setTodos([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, []);
 
   const handleMenuItemClick = (itemId: string) => {
+    if (itemId === 'task-maker') {
+      // Navigate to TaskMaker page instead of rendering it in dashboard
+      navigate('/task-maker');
+      return;
+    }
     setActiveMenuItem(itemId);
     setIsMobileMenuOpen(false);
   };
@@ -103,6 +111,13 @@ function Dashboard() {
 
   const handleTodoDelete = (todoId: string) => {
     setTodos((prev: TodoItem[]) => prev.filter((todo: TodoItem) => todo.id !== todoId));
+  };
+
+  const handleAssignmentChange = () => {
+    // Force calendar refresh when assignments change
+    setCalendarRefreshKey(prev => prev + 1);
+    // Also refresh todos since they include assignments
+    fetchData();
   };
 
   const handleAddClass = () => {
@@ -214,17 +229,9 @@ function Dashboard() {
           />
         );
       case 'calendar':
-        return <Calendar />;
+        return <Calendar refreshKey={calendarRefreshKey} />;
       case 'assignments':
-        return <Assignments userRole={user?.role || 'student'} />;
-      case 'task-maker':
-        return (
-          <div className="text-center py-12">
-            <PlusSquare className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Task Maker</h3>
-            <p className="text-gray-600">Task creation and management coming soon...</p>
-          </div>
-        );
+        return <Assignments userRole={user?.role || 'student'} onAssignmentChange={handleAssignmentChange} />;
       case 'overview':
         return (
           <div className="text-center py-12">
@@ -294,8 +301,6 @@ function Dashboard() {
         onClose={() => setIsClassModalOpen(false)}
         onSave={handleClassModalSave}
       />
-
-
     </div>
   );
 }
@@ -303,9 +308,15 @@ function Dashboard() {
 function App() {
   return (
     <AuthProvider>
-      <AuthWrapper>
-        <Dashboard />
-      </AuthWrapper>
+      <Router>
+        <AuthWrapper>
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/task-maker" element={<TaskMakerPage />} />
+          </Routes>
+        </AuthWrapper>
+      </Router>
     </AuthProvider>
   );
 }

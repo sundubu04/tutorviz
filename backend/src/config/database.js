@@ -99,10 +99,10 @@ const createTables = async () => {
       CREATE TABLE IF NOT EXISTS assignment_attachments (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
-        file_name VARCHAR(255) NOT NULL,
-        file_url VARCHAR(500) NOT NULL,
-        file_size INTEGER NOT NULL,
-        file_type VARCHAR(100) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        url VARCHAR(500) NOT NULL,
+        size INTEGER NOT NULL,
+        type VARCHAR(100) NOT NULL,
         uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -164,9 +164,64 @@ const createTables = async () => {
 
 
     console.log('Database tables created successfully');
+    
+    // Sync existing assignments to calendar events
+    await syncAssignmentsToCalendar();
   } catch (error) {
     console.error('Error creating database tables:', error);
     throw error;
+  }
+};
+
+// Function to sync existing assignments to calendar events
+const syncAssignmentsToCalendar = async () => {
+  try {
+    console.log('🔄 Syncing existing assignments to calendar events...');
+    
+    // Get all assignments that don't have corresponding calendar events
+    const result = await pool.query(`
+      SELECT 
+        a.id, a.title, a.description, a.due_date, a.class_id, a.created_by
+      FROM assignments a
+      WHERE NOT EXISTS (
+        SELECT 1 FROM calendar_events ce 
+        WHERE ce.event_type = 'assignment' 
+        AND ce.title = a.title 
+        AND ce.class_id = a.class_id
+      )
+    `);
+    
+    if (result.rows.length > 0) {
+      console.log(`📅 Found ${result.rows.length} assignments to sync to calendar`);
+      
+      for (const assignment of result.rows) {
+        try {
+          await pool.query(
+            `INSERT INTO calendar_events (title, description, start_time, end_time, event_type, class_id, is_all_day, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              assignment.title,
+              assignment.description || `Assignment due for ${assignment.title}`,
+              assignment.due_date,
+              new Date(new Date(assignment.due_date).getTime() + 24 * 60 * 60 * 1000),
+              'assignment',
+              assignment.class_id,
+              true,
+              assignment.created_by
+            ]
+          );
+        } catch (error) {
+          console.error(`❌ Failed to sync assignment ${assignment.id} to calendar:`, error);
+        }
+      }
+      
+      console.log(`✅ Successfully synced ${result.rows.length} assignments to calendar events`);
+    } else {
+      console.log('✅ All assignments are already synced to calendar events');
+    }
+  } catch (error) {
+    console.error('❌ Error syncing assignments to calendar:', error);
+    // Don't fail the setup if sync fails
   }
 };
 

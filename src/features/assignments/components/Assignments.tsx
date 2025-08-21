@@ -14,18 +14,19 @@ import {
   Download,
   Eye
 } from 'lucide-react';
-import { apiClient, type Class as ApiClass } from '../utils/apiClient';
-import { type Assignment, type Class } from '../types';
+import { apiClient, type Class as ApiClass } from '../../../utils/apiClient';
+import { type Assignment, type Class } from '../../../types';
 import AssignmentModal from './AssignmentModal';
-import Button from './Button';
-import Tabs from './Tabs';
-import { createIconElement } from '../utils/iconMapper';
+import { Button } from '../../../components/ui';
+import { Tabs } from '../../../components/ui';
+import { createIconElement } from '../../../utils/iconMapper';
 
 interface AssignmentsProps {
   userRole: 'student' | 'teacher' | 'admin';
+  onAssignmentChange?: () => void; // Callback to notify parent of assignment changes
 }
 
-const Assignments: React.FC<AssignmentsProps> = ({ userRole }) => {
+const Assignments: React.FC<AssignmentsProps> = ({ userRole, onAssignmentChange }) => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,10 +44,15 @@ const Assignments: React.FC<AssignmentsProps> = ({ userRole }) => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      console.log('Fetching assignments and classes...');
+      
       const [assignmentsResponse, classesResponse] = await Promise.all([
         apiClient.getAssignments(),
         apiClient.getClasses()
       ]);
+      
+      console.log('Assignments response:', assignmentsResponse);
+      console.log('Classes response:', classesResponse);
       
       setAssignments(assignmentsResponse.assignments);
       
@@ -59,6 +65,8 @@ const Assignments: React.FC<AssignmentsProps> = ({ userRole }) => {
         createdAt: apiClass.createdAt
       }));
       setClasses(transformedClasses);
+      
+      console.log('State updated with assignments:', assignmentsResponse.assignments);
     } catch (error) {
       console.error('Error fetching assignments:', error);
     } finally {
@@ -84,6 +92,10 @@ const Assignments: React.FC<AssignmentsProps> = ({ userRole }) => {
     try {
       await apiClient.deleteAssignment(assignmentId);
       await fetchData();
+      // Notify parent component that assignments have changed
+      if (onAssignmentChange) {
+        onAssignmentChange();
+      }
     } catch (error) {
       console.error('Error deleting assignment:', error);
       alert('Failed to delete assignment. Please try again.');
@@ -93,6 +105,10 @@ const Assignments: React.FC<AssignmentsProps> = ({ userRole }) => {
   const handleModalSave = async () => {
     await fetchData();
     setIsModalOpen(false);
+    // Notify parent component that assignments have changed
+    if (onAssignmentChange) {
+      onAssignmentChange();
+    }
   };
 
   const filteredAssignments = assignments.filter(assignment => {

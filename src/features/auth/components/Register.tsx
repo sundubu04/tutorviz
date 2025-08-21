@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Mail, Lock, User, BookOpen, GraduationCap, UserCheck } from 'lucide-react';
-import Button from './Button';
+import { Eye, EyeOff, Mail, Lock, User, BookOpen, GraduationCap, UserCheck, AlertCircle } from 'lucide-react';
+import { Button } from '../../../components/ui';
 
 interface RegisterProps {
   onRegister: (userData: {
@@ -94,6 +94,20 @@ const Register: React.FC<RegisterProps> = ({
     }
   };
 
+  // Helper function to get user-friendly error message
+  const getErrorMessage = (error: string): string => {
+    if (error.includes('User already exists') || error.includes('already exists')) {
+      return 'An account with this email already exists. Please sign in instead.';
+    }
+    if (error.includes('Validation failed')) {
+      return 'Please check your input and try again.';
+    }
+    if (error.includes('Registration failed')) {
+      return 'Unable to create account. Please try again later.';
+    }
+    return error;
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -183,7 +197,7 @@ const Register: React.FC<RegisterProps> = ({
                   value={formData.email}
                   onChange={(e) => handleInputChange('email', e.target.value)}
                   className={`appearance-none relative block w-full pl-10 pr-3 py-3 border rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                    formErrors.email ? 'border-red-300' : 'border-gray-300'
+                    formErrors.email || error ? 'border-red-300' : 'border-gray-300'
                   }`}
                   placeholder="Enter your email"
                 />
@@ -244,7 +258,7 @@ const Register: React.FC<RegisterProps> = ({
                   value={formData.password}
                   onChange={(e) => handleInputChange('password', e.target.value)}
                   className={`appearance-none relative block w-full pl-10 pr-12 py-3 border rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                    formErrors.password ? 'border-red-300' : 'border-gray-300'
+                    formErrors.password || error ? 'border-red-300' : 'border-gray-300'
                   }`}
                   placeholder="Create a password"
                 />
@@ -304,10 +318,11 @@ const Register: React.FC<RegisterProps> = ({
               )}
             </div>
 
-            {/* Error Message */}
+            {/* Subtle Error Message */}
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-600">{error}</p>
+              <div className="flex items-center space-x-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span>{getErrorMessage(error)}</span>
               </div>
             )}
 

@@ -26,17 +26,18 @@ A comprehensive web-based classroom management system designed to streamline edu
 ### Backend
 - **Runtime**: Node.js
 - **Framework**: Express.js
-- **Database**: PostgreSQL
+- **Database**: PostgreSQL (Docker containerized)
 - **Authentication**: JWT (jsonwebtoken)
 - **Password Hashing**: bcryptjs
 - **Validation**: express-validator
 - **Security**: helmet, express-rate-limit
+- **Containerization**: Docker & Docker Compose
 
 ## 📋 Prerequisites
 
-- Node.js (v14 or higher)
-- PostgreSQL (v12 or higher)
-- npm or yarn
+- **Node.js** (v14 or higher)
+- **Docker** and **Docker Compose**
+- **npm** or **yarn**
 
 ## 🚀 Quick Start
 
@@ -46,9 +47,98 @@ git clone <repository-url>
 cd TutoriAI
 ```
 
-### 2. Backend Setup
-
+### 2. One-Time Setup (Automatic)
 ```bash
+# Run the setup script (handles everything automatically)
+./setup.sh
+```
+
+This script will:
+- ✅ Check Docker and Docker Compose availability
+- ✅ Start PostgreSQL database container
+- ✅ Create the database (`tutoriai_db`)
+- ✅ Set up environment configuration
+- ✅ Install all dependencies
+- ✅ Initialize database tables
+- ✅ Provide clear next steps
+
+### 3. Start the Application
+```bash
+# Start both backend and frontend servers
+./start.sh
+```
+
+This script will:
+- ✅ Start the backend server (port 5001)
+- ✅ Start the frontend server (port 3000)
+- ✅ Show you the URLs and credentials
+- ✅ Handle graceful shutdown with Ctrl+C
+
+### 4. Access the Application
+
+The application will be available at:
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:5001
+
+## 🐳 Docker-Based Backend Setup
+
+### Quick Docker Setup
+```bash
+# Start PostgreSQL database
+docker-compose up -d postgres
+
+# Wait for database to be ready (5-10 seconds)
+sleep 5
+
+# Set up backend environment
+cd backend
+cp env.example .env
+
+# Install dependencies
+npm install
+
+# Initialize database
+npm run setup
+
+# Start backend server
+npm run dev
+```
+
+### Docker Services
+
+The project includes Docker Compose configuration for easy database setup:
+
+```yaml
+# docker-compose.yml
+services:
+  postgres:
+    image: postgres:14
+    container_name: tutoriai-postgres
+    environment:
+      POSTGRES_DB: tutoriai_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: your_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+```
+
+### 5. Manual Setup (Alternative)
+
+If you prefer manual setup or need to troubleshoot:
+
+#### Backend Setup with Docker
+```bash
+# Navigate to project root
+cd TutoriAI
+
+# Start PostgreSQL database
+docker-compose up -d postgres
+
+# Wait for database to be ready
+sleep 5
+
 # Navigate to backend directory
 cd backend
 
@@ -61,7 +151,7 @@ cp env.example .env
 
 Edit the `.env` file with your configuration:
 ```env
-PORT=5000
+PORT=5001
 NODE_ENV=development
 DB_HOST=localhost
 DB_PORT=5432
@@ -71,12 +161,11 @@ DB_PASSWORD=your_password
 JWT_SECRET=your_jwt_secret_key_here
 JWT_EXPIRES_IN=24h
 CORS_ORIGIN=http://localhost:3000
+UPLOAD_PATH=./uploads
+MAX_FILE_SIZE=10485760
 ```
 
 ```bash
-# Set up PostgreSQL database
-createdb tutoriai_db
-
 # Initialize database and sample data
 npm run setup
 
@@ -84,10 +173,9 @@ npm run setup
 npm run dev
 ```
 
-### 3. Frontend Setup
-
+#### Frontend Setup
 ```bash
-# Navigate to frontend directory (root of project)
+# Navigate to project root
 cd ..
 
 # Install dependencies
@@ -97,36 +185,57 @@ npm install
 npm start
 ```
 
-### 4. Verify Installation
+## 🗄 Database Management
 
-The application should now be running at:
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:5000
-
-Test the API:
+### Docker Database Commands
 ```bash
-cd backend
-npm run test-api
+# Start database
+docker-compose up -d postgres
+
+# Stop database
+docker-compose stop postgres
+
+# View database logs
+docker-compose logs postgres
+
+# Reset database (removes all data)
+docker-compose down -v
+docker-compose up -d postgres
 ```
 
-## 📊 Sample Data
+### Database Reset
+```bash
+# Reset database and recreate tables
+cd backend
+npm run reset
+```
 
-The setup script creates sample data for testing:
+## 🛠 Available Scripts
 
-### Users
-- **Teacher**: teacher@example.com (password: demo123)
-- **Student 1**: student1@example.com (password: demo123)
-- **Student 2**: student2@example.com (password: demo123)
+### Setup Scripts
+- **`./setup.sh`** - Complete one-time setup (Docker database, dependencies, configuration)
+- **`./start.sh`** - Start both backend and frontend servers
 
-### Sample Classes
-- Java Programming
-- Operating Systems
-- Python Development
-- C++ Programming
-- Database Systems
-- Web Development
+### Backend Scripts
+- **`npm run dev`** - Start backend development server
+- **`npm run setup`** - Initialize database and sample data
+- **`npm run reset`** - Reset database and recreate tables
+- **`npm test`** - Run backend tests
+- **`npm run test:all`** - Run all backend tests
+
+### Docker Scripts
+- **`docker-compose up -d postgres`** - Start PostgreSQL database
+- **`docker-compose stop postgres`** - Stop PostgreSQL database
+- **`docker-compose logs postgres`** - View database logs
 
 ## 🔧 Development
+
+### Quick Development Start
+```bash
+# Start database and both servers for development
+docker-compose up -d postgres
+./start.sh
+```
 
 ### Backend Development
 
@@ -140,7 +249,7 @@ npm run dev
 npm run migrate
 
 # Test API endpoints
-npm run test-api
+npm run test:api
 
 # Run tests
 npm test
@@ -160,6 +269,8 @@ npm test
 ```
 
 ## 📚 API Documentation
+
+**Base URL**: `http://localhost:5001/api`
 
 ### Authentication Endpoints
 - `POST /api/auth/register` - Register new user
@@ -184,11 +295,9 @@ npm test
 - `POST /api/calendar` - Create new event
 - `PUT /api/calendar/:id` - Update event
 
-
-
 ## 🗄 Database Schema
 
-The application uses PostgreSQL with the following main tables:
+The application uses PostgreSQL (containerized) with the following main tables:
 
 - **users**: User accounts and profiles
 - **classes**: Class information and enrollments
@@ -211,7 +320,7 @@ The application uses PostgreSQL with the following main tables:
 ```bash
 cd backend
 npm test
-npm run test-api
+npm run test:api
 ```
 
 ### Frontend Tests
@@ -222,7 +331,7 @@ npm test
 ## 📦 Deployment
 
 ### Backend Deployment
-1. Set up PostgreSQL database
+1. Set up PostgreSQL database (or use Docker)
 2. Configure environment variables
 3. Run database migrations
 4. Start the server with `npm start`
@@ -230,6 +339,18 @@ npm test
 ### Frontend Deployment
 1. Build the application: `npm run build`
 2. Deploy the `build` folder to your web server
+
+## 🐳 Docker Production
+
+For production deployment, you can use the provided Docker configurations:
+
+```bash
+# Production database
+docker-compose -f docker-compose.prod.yml up -d
+
+# Development environment
+docker-compose -f docker-compose.dev.yml up -d
+```
 
 ## 🤝 Contributing
 

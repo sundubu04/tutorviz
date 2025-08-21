@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, Calendar, Clock, MapPin, BookOpen, User } from 'lucide-react';
-import { CalendarEvent } from '../utils/apiClient';
-import Button from './Button';
+import { CalendarEvent } from '../../../utils/apiClient';
+import { Button } from '../../../components/ui';
 
 interface EventDetailModalProps {
   isOpen: boolean;

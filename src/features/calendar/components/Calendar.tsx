@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar as CalendarIcon, Plus, Edit, Trash2, Clock, MapPin } from 'lucide-react';
-import { apiClient, CalendarEvent } from '../utils/apiClient';
+import { apiClient, CalendarEvent } from '../../../utils/apiClient';
 import EventModal from './EventModal';
 import EventDetailModal from './EventDetailModal';
-import Button from './Button';
+import { Button } from '../../../components/ui';
 
-interface CalendarProps {}
+interface CalendarProps {
+  refreshKey?: number; // Key to force refresh when assignments change
+}
 
-const Calendar: React.FC<CalendarProps> = () => {
+const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -37,7 +39,7 @@ const Calendar: React.FC<CalendarProps> = () => {
 
   useEffect(() => {
     fetchEvents();
-  }, [currentDate]);
+  }, [currentDate, refreshKey]);
 
   const fetchEvents = async () => {
     try {

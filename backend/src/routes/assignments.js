@@ -5,16 +5,165 @@ const { authenticateToken, requireRole, requireOwnership, requireClassEnrollment
 
 const router = express.Router();
 
+// Test endpoint to verify database connection
+router.get('/test', async (req, res) => {
+  try {
+    // Test database connection
+    const result = await pool.query('SELECT NOW() as current_time');
+    console.log('Database connection test successful:', result.rows[0]);
+    
+    // Check if assignments table exists
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'assignments'
+      );
+    `);
+    
+    const tableExists = tableCheck.rows[0].exists;
+    console.log('Assignments table exists:', tableExists);
+    
+    if (tableExists) {
+      // Check table structure
+      const structureCheck = await pool.query(`
+        SELECT column_name, data_type, is_nullable 
+        FROM information_schema.columns 
+        WHERE table_name = 'assignments' 
+        ORDER BY ordinal_position
+      `);
+      console.log('Table structure:', structureCheck.rows);
+    }
+    
+    res.json({ 
+      message: 'Database test successful',
+      currentTime: result.rows[0].current_time,
+      assignmentsTableExists: tableExists
+    });
+  } catch (error) {
+    console.error('Database test failed:', error);
+    res.status(500).json({ 
+      error: 'Database test failed',
+      message: error.message
+    });
+  }
+});
+
+// Helper function to map database row to assignment object
+const mapAssignmentRow = (row) => {
+  console.log('Mapping database row:', row);
+  
+  const mapped = {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    dueDate: row.due_date ? new Date(row.due_date).toISOString() : null,
+    priority: row.priority,
+    topic: row.topic,
+    className: row.class_name,
+    classId: row.class_id,
+    submissionCount: row.submission_count,
+    submissionId: row.submission_id,
+    submittedAt: row.submitted_at,
+    grade: row.grade,
+    createdAt: row.created_at
+  };
+  
+  console.log('Mapped result:', mapped);
+  return mapped;
+};
+
+// Helper function to create calendar event for assignment
+const createCalendarEvent = async (client, assignment, classId, userId) => {
+  try {
+    console.log('Creating calendar event for assignment:', { assignment, classId, userId });
+    
+    const result = await client.query(
+      `INSERT INTO calendar_events (title, description, start_time, end_time, event_type, class_id, is_all_day, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [
+        assignment.title,
+        assignment.description || `Assignment due for ${assignment.title}`,
+        assignment.due_date, // Use the database column name
+        new Date(new Date(assignment.due_date).getTime() + 24 * 60 * 60 * 1000),
+        'assignment',
+        classId,
+        true,
+        userId
+      ]
+    );
+    console.log('Calendar event created successfully:', result.rows[0]);
+    return result.rows[0].id;
+  } catch (error) {
+    console.error('Failed to create calendar event:', error);
+    // Don't throw error, just return null to indicate failure
+    return null;
+  }
+};
+
+// Helper function to update calendar event for assignment
+const updateCalendarEvent = async (client, assignment, classId, eventId) => {
+  try {
+    console.log('Updating calendar event with data:', { assignment, classId, eventId });
+    
+    await client.query(
+      `UPDATE calendar_events 
+       SET title = $1, description = $2, start_time = $3, end_time = $4, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $5`,
+      [
+        assignment.title,
+        assignment.description || `Assignment due for ${assignment.title}`,
+        assignment.due_date, // Use the database column name
+        new Date(new Date(assignment.due_date).getTime() + 24 * 60 * 60 * 1000),
+        eventId
+      ]
+    );
+    console.log('Calendar event updated successfully');
+    return true;
+  } catch (error) {
+    console.error('Failed to update calendar event:', error);
+    return false;
+  }
+};
+
+// Helper function to handle student assignments
+const handleStudentAssignments = async (client, assignmentId, classId, assignedStudents) => {
+  if (!assignedStudents || assignedStudents.length === 0) return;
+
+  // Verify all students are enrolled in the class
+  const enrolledStudents = await client.query(
+    `SELECT student_id FROM class_enrollments WHERE class_id = $1 AND student_id = ANY($2)`,
+    [classId, assignedStudents]
+  );
+
+  if (enrolledStudents.rows.length !== assignedStudents.length) {
+    throw new Error('Some students are not enrolled in this class');
+  }
+
+  // Remove existing assignments
+  await client.query(
+    'DELETE FROM assignment_student_assignments WHERE assignment_id = $1',
+    [assignmentId]
+  );
+
+  // Insert new assignments
+  for (const studentId of assignedStudents) {
+    await client.query(
+      `INSERT INTO assignment_student_assignments (assignment_id, student_id)
+       VALUES ($1, $2)`,
+      [assignmentId, studentId]
+    );
+  }
+};
+
 // Get all assignments for current user
 router.get('/', authenticateToken, async (req, res) => {
-  console.log(`📋 [ASSIGNMENTS] GET / - User: ${req.user.first_name} ${req.user.last_name} (${req.user.role})`);
-  
   try {
     let query;
-    let params = [];
+    let params = [req.user.id];
 
     if (req.user.role === 'teacher') {
-      // Teachers see assignments they created
       query = `
         SELECT 
           a.id, a.title, a.description, a.due_date, a.priority, a.topic, a.created_at,
@@ -27,9 +176,7 @@ router.get('/', authenticateToken, async (req, res) => {
         GROUP BY a.id, c.name, c.id
         ORDER BY a.due_date ASC
       `;
-      params = [req.user.id];
     } else {
-      // Students see assignments from classes they're enrolled in
       query = `
         SELECT 
           a.id, a.title, a.description, a.due_date, a.priority, a.topic, a.created_at,
@@ -42,31 +189,14 @@ router.get('/', authenticateToken, async (req, res) => {
         WHERE ce.student_id = $1
         ORDER BY a.due_date ASC
       `;
-      params = [req.user.id];
     }
 
     const result = await pool.query(query, params);
+    const assignments = result.rows.map(mapAssignmentRow);
     
-    const assignments = result.rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      dueDate: row.due_date ? new Date(row.due_date).toISOString() : null,
-      priority: row.priority,
-      topic: row.topic,
-      className: row.class_name,
-      classId: row.class_id,
-      submissionCount: row.submission_count,
-      submissionId: row.submission_id,
-      submittedAt: row.submitted_at,
-      grade: row.grade,
-      createdAt: row.created_at
-    }));
-
-    console.log(`✅ [ASSIGNMENTS] GET / - Success: Found ${assignments.length} assignments`);
     res.json({ assignments });
   } catch (error) {
-    console.error('❌ [ASSIGNMENTS] GET / - Error:', error.message);
+    console.error('Error fetching assignments:', error);
     res.status(500).json({ 
       error: 'Assignments fetch failed',
       message: 'An error occurred while fetching assignments'
@@ -76,11 +206,8 @@ router.get('/', authenticateToken, async (req, res) => {
 
 // Get assignments for a specific class
 router.get('/class/:classId', authenticateToken, requireClassEnrollment(), async (req, res) => {
-  console.log(`📋 [ASSIGNMENTS] GET /class/${req.params.classId} - User: ${req.user.first_name} ${req.user.last_name} (${req.user.role})`);
-  
   try {
     const { classId } = req.params;
-
     let query;
     let params = [classId];
 
@@ -99,36 +226,22 @@ router.get('/class/:classId', authenticateToken, requireClassEnrollment(), async
       query = `
         SELECT 
           a.id, a.title, a.description, a.due_date, a.priority, a.topic, a.created_at,
-          ass.id as submission_id, ass.submitted_at, ass.grade, ass.feedback
+          ass.id as submission_id, ass.submitted_at, ass.grade
         FROM assignments a
-        LEFT JOIN assignment_submissions ass ON a.id = ass.assignment_id AND ass.student_id = $2
-        WHERE a.class_id = $1
+        LEFT JOIN assignment_submissions ass ON a.id = ass.assignment_id AND ass.student_id = $1
+        INNER JOIN class_enrollments ce ON a.class_id = ce.class_id
+        WHERE a.class_id = $1 AND ce.student_id = $1
         ORDER BY a.due_date ASC
       `;
       params.push(req.user.id);
     }
 
     const result = await pool.query(query, params);
+    const assignments = result.rows.map(mapAssignmentRow);
     
-    const assignments = result.rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      dueDate: row.due_date ? new Date(row.due_date).toISOString() : null,
-      priority: row.priority,
-      topic: row.topic,
-      submissionCount: row.submission_count,
-      submissionId: row.submission_id,
-      submittedAt: row.submitted_at,
-      grade: row.grade,
-      feedback: row.feedback,
-      createdAt: row.created_at
-    }));
-
-    console.log(`✅ [ASSIGNMENTS] GET /class/${classId} - Success: Found ${assignments.length} assignments`);
     res.json({ assignments });
   } catch (error) {
-    console.error('❌ [ASSIGNMENTS] GET /class/${classId} - Error:', error.message);
+    console.error('Error fetching class assignments:', error);
     res.status(500).json({ 
       error: 'Class assignments fetch failed',
       message: 'An error occurred while fetching class assignments'
@@ -138,143 +251,54 @@ router.get('/class/:classId', authenticateToken, requireClassEnrollment(), async
 
 // Get single assignment by ID
 router.get('/:id', authenticateToken, async (req, res) => {
-  console.log(`📋 [ASSIGNMENTS] GET /${req.params.id} - User: ${req.user.first_name} ${req.user.last_name} (${req.user.role})`);
-  
   try {
     const { id } = req.params;
+    let query;
+    let params = [id];
 
-    // Get assignment details
-    const assignmentResult = await pool.query(`
-      SELECT 
-        a.id, a.title, a.description, a.due_date, a.priority, a.topic, a.created_at,
-        c.name as class_name, c.id as class_id,
-        u.first_name as created_by_first_name, u.last_name as created_by_last_name
-      FROM assignments a
-      LEFT JOIN classes c ON a.class_id = c.id
-      LEFT JOIN users u ON a.created_by = u.id
-      WHERE a.id = $1
-    `, [id]);
+    if (req.user.role === 'teacher') {
+      query = `
+        SELECT 
+          a.id, a.title, a.description, a.due_date, a.priority, a.topic, a.created_at,
+          c.name as class_name, c.id as class_id,
+          COUNT(ass.id) as submission_count
+        FROM assignments a
+        LEFT JOIN classes c ON a.class_id = c.id
+        LEFT JOIN assignment_submissions ass ON a.id = ass.assignment_id
+        WHERE a.id = $1
+        GROUP BY a.id, c.name, c.id
+      `;
+    } else {
+      query = `
+        SELECT 
+          a.id, a.title, a.description, a.due_date, a.priority, a.topic, a.created_at,
+          c.name as class_name, c.id as class_id,
+          ass.id as submission_id, ass.submitted_at, ass.grade
+        FROM assignments a
+        INNER JOIN classes c ON a.class_id = c.id
+        INNER JOIN class_enrollments ce ON c.id = ce.class_id
+        LEFT JOIN assignment_submissions ass ON a.id = ass.assignment_id AND ass.student_id = $1
+        WHERE a.id = $1 AND ce.student_id = $1
+      `;
+      params.push(req.user.id);
+    }
 
-    if (assignmentResult.rows.length === 0) {
-      console.log(`❌ [ASSIGNMENTS] GET /${id} - Assignment not found`);
+    const result = await pool.query(query, params);
+    
+    if (result.rows.length === 0) {
       return res.status(404).json({ 
         error: 'Assignment not found',
         message: 'The requested assignment does not exist'
       });
     }
 
-    const assignment = assignmentResult.rows[0];
-
-    // Check if user has access to this assignment
-    if (req.user.role === 'student') {
-      const enrollmentResult = await pool.query(
-        'SELECT id FROM class_enrollments WHERE class_id = $1 AND student_id = $2',
-        [assignment.class_id, req.user.id]
-      );
-
-      if (enrollmentResult.rows.length === 0) {
-        console.log(`❌ [ASSIGNMENTS] GET /${id} - Access denied: Student not enrolled in class`);
-        return res.status(403).json({ 
-          error: 'Access denied',
-          message: 'You do not have access to this assignment'
-        });
-      }
-    } else if (req.user.role === 'teacher' && assignment.created_by !== req.user.id) {
-      console.log(`❌ [ASSIGNMENTS] GET /${id} - Access denied: Teacher doesn't own assignment`);
-      return res.status(403).json({ 
-        error: 'Access denied',
-        message: 'You do not have access to this assignment'
-      });
-    }
-
-    // Get submissions
-    let submissionsQuery;
-    let submissionsParams = [id];
-
-    if (req.user.role === 'teacher') {
-      submissionsQuery = `
-        SELECT 
-          as.id, as.submission_text, as.file_url, as.submitted_at, as.grade, as.feedback,
-          u.first_name, u.last_name, u.email
-        FROM assignment_submissions as
-        LEFT JOIN users u ON as.student_id = u.id
-        WHERE as.assignment_id = $1
-        ORDER BY as.submitted_at DESC
-      `;
-    } else {
-      submissionsQuery = `
-        SELECT 
-          id, submission_text, file_url, submitted_at, grade, feedback
-        FROM assignment_submissions
-        WHERE assignment_id = $1 AND student_id = $2
-      `;
-      submissionsParams.push(req.user.id);
-    }
-
-    const submissionsResult = await pool.query(submissionsQuery, submissionsParams);
-
-    // Get attachments for this assignment
-    const attachmentsResult = await pool.query(`
-      SELECT id, file_name, file_url, file_size, file_type, uploaded_at
-      FROM assignment_attachments
-      WHERE assignment_id = $1
-      ORDER BY uploaded_at ASC
-    `, [id]);
-
-    // Get assigned students for this assignment
-    const assignedStudentsResult = await pool.query(`
-      SELECT student_id
-      FROM assignment_student_assignments
-      WHERE assignment_id = $1
-    `, [id]);
-
-    const responseData = {
-      assignment: {
-        id: assignment.id,
-        title: assignment.title,
-        description: assignment.description,
-        dueDate: assignment.due_date ? new Date(assignment.due_date).toISOString() : null,
-        priority: assignment.priority,
-        topic: assignment.topic,
-        className: assignment.class_name,
-        classId: assignment.class_id,
-        createdBy: {
-          firstName: assignment.created_by_first_name,
-          lastName: assignment.created_by_last_name
-        },
-        attachments: attachmentsResult.rows.map(attachment => ({
-          id: attachment.id,
-          name: attachment.file_name,
-          url: attachment.file_url,
-          size: attachment.file_size,
-          type: attachment.file_type,
-          uploadedAt: attachment.uploaded_at
-        })),
-        assignedStudents: assignedStudentsResult.rows.map(row => row.student_id),
-        submissions: submissionsResult.rows.map(submission => ({
-          id: submission.id,
-          submissionText: submission.submission_text,
-          fileUrl: submission.file_url,
-          submittedAt: submission.submitted_at,
-          grade: submission.grade,
-          feedback: submission.feedback,
-          student: submission.first_name ? {
-            firstName: submission.first_name,
-            lastName: submission.last_name,
-            email: submission.email
-          } : null
-        })),
-        createdAt: assignment.created_at
-      }
-    };
-
-    console.log(`✅ [ASSIGNMENTS] GET /${id} - Success: Assignment "${assignment.title}" with ${attachmentsResult.rows.length} attachments, ${assignedStudentsResult.rows.length} assigned students, ${submissionsResult.rows.length} submissions`);
-    res.json(responseData);
+    const assignment = mapAssignmentRow(result.rows[0]);
+    res.json({ assignment });
   } catch (error) {
-    console.error(`❌ [ASSIGNMENTS] GET /${req.params.id} - Error:`, error.message);
+    console.error('Error fetching assignment:', error);
     res.status(500).json({ 
       error: 'Assignment fetch failed',
-      message: 'An error occurred while fetching assignment details'
+      message: 'An error occurred while fetching the assignment'
     });
   }
 });
@@ -290,20 +314,18 @@ router.post('/', authenticateToken, requireRole(['teacher']), [
   body('assignedStudents').optional().isArray(),
   body('assignedStudents.*').optional().isUUID()
 ], async (req, res) => {
-  console.log(`📝 [ASSIGNMENTS] POST / - User: ${req.user.first_name} ${req.user.last_name} (${req.user.role})`);
-  console.log(`📝 [ASSIGNMENTS] POST / - Request body:`, {
-    title: req.body.title,
-    classId: req.body.classId,
-    dueDate: req.body.dueDate,
-    dueDateType: typeof req.body.dueDate,
-    priority: req.body.priority,
-    topic: req.body.topic,
-    assignedStudentsCount: req.body.assignedStudents?.length || 0
-  });
   try {
+    console.log('Creating assignment with data:', req.body);
+    console.log('User making request:', { 
+      id: req.user.id, 
+      role: req.user.role, 
+      firstName: req.user.first_name,
+      lastName: req.user.last_name
+    });
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log(`❌ [ASSIGNMENTS] POST / - Validation failed:`, errors.array());
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ 
         error: 'Validation failed',
         errors: errors.array()
@@ -319,14 +341,13 @@ router.post('/', authenticateToken, requireRole(['teacher']), [
     );
 
     if (classResult.rows.length === 0) {
-      console.log(`❌ [ASSIGNMENTS] POST / - Access denied: Teacher doesn't own class ${classId}`);
+      console.log('Access denied: Teacher does not own class');
       return res.status(403).json({ 
         error: 'Access denied',
         message: 'You can only create assignments for classes you teach'
       });
     }
 
-    // Start a transaction
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -340,57 +361,33 @@ router.post('/', authenticateToken, requireRole(['teacher']), [
       );
 
       const newAssignment = result.rows[0];
+      console.log('Assignment created:', newAssignment);
 
-      // Assign students if provided
-      if (assignedStudents && assignedStudents.length > 0) {
-        console.log(`📝 [ASSIGNMENTS] POST / - Assigning ${assignedStudents.length} students to assignment`);
-        
-        // Verify all students are enrolled in the class
-        const enrolledStudents = await client.query(
-          `SELECT student_id FROM class_enrollments WHERE class_id = $1 AND student_id = ANY($2)`,
-          [classId, assignedStudents]
-        );
+      // Handle student assignments
+      await handleStudentAssignments(client, newAssignment.id, classId, assignedStudents);
 
-        if (enrolledStudents.rows.length !== assignedStudents.length) {
-          console.log(`❌ [ASSIGNMENTS] POST / - Error: Some students are not enrolled in class ${classId}`);
-          throw new Error('Some students are not enrolled in this class');
-        }
-
-        // Insert student assignments
-        for (const studentId of assignedStudents) {
-          await client.query(
-            `INSERT INTO assignment_student_assignments (assignment_id, student_id)
-             VALUES ($1, $2)`,
-            [newAssignment.id, studentId]
-          );
-        }
-        console.log(`✅ [ASSIGNMENTS] POST / - Successfully assigned ${assignedStudents.length} students`);
-      }
+      // Create calendar event
+      const calendarEventId = await createCalendarEvent(client, newAssignment, classId, req.user.id);
+      console.log('Calendar event created with ID:', calendarEventId);
 
       await client.query('COMMIT');
 
-      console.log(`✅ [ASSIGNMENTS] POST / - Success: Created assignment "${newAssignment.title}" (ID: ${newAssignment.id})`);
-      
+      const responseAssignment = mapAssignmentRow(newAssignment);
+      console.log('Sending response:', responseAssignment);
+
       res.status(201).json({
         message: 'Assignment created successfully',
-        assignment: {
-          id: newAssignment.id,
-          title: newAssignment.title,
-          description: newAssignment.description,
-          dueDate: newAssignment.due_date,
-          priority: newAssignment.priority,
-          topic: newAssignment.topic,
-          createdAt: newAssignment.created_at
-        }
+        assignment: responseAssignment
       });
     } catch (error) {
+      console.error('Error in transaction:', error);
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
     }
   } catch (error) {
-    console.error(`❌ [ASSIGNMENTS] POST / - Error:`, error.message);
+    console.error('Error creating assignment:', error);
     res.status(500).json({ 
       error: 'Assignment creation failed',
       message: 'An error occurred while creating the assignment'
@@ -408,15 +405,19 @@ router.put('/:id', authenticateToken, requireRole(['teacher']), requireOwnership
   body('assignedStudents').optional().isArray(),
   body('assignedStudents.*').optional().isUUID()
 ], async (req, res) => {
-  console.log(`📝 [ASSIGNMENTS] PUT /${req.params.id} - User: ${req.user.first_name} ${req.user.last_name} (${req.user.role})`);
-  console.log(`📝 [ASSIGNMENTS] PUT /${req.params.id} - Request body:`, {
-    ...req.body,
-    dueDateType: typeof req.body.dueDate
-  });
-  
   try {
+    console.log('Updating assignment with data:', req.body);
+    console.log('Assignment ID:', req.params.id);
+    console.log('User making request:', { 
+      id: req.user.id, 
+      role: req.user.role, 
+      firstName: req.user.first_name,
+      lastName: req.user.last_name
+    });
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ 
         error: 'Validation failed',
         errors: errors.array()
@@ -434,115 +435,137 @@ router.put('/:id', authenticateToken, requireRole(['teacher']), requireOwnership
       updateFields.push(`title = $${paramCount++}`);
       updateValues.push(title);
     }
-
     if (description !== undefined) {
       updateFields.push(`description = $${paramCount++}`);
       updateValues.push(description);
     }
-
     if (dueDate) {
       updateFields.push(`due_date = $${paramCount++}`);
       updateValues.push(dueDate);
     }
-
     if (priority !== undefined) {
       updateFields.push(`priority = $${paramCount++}`);
       updateValues.push(priority);
     }
-
     if (topic !== undefined) {
       updateFields.push(`topic = $${paramCount++}`);
       updateValues.push(topic);
     }
 
+    console.log('Update fields:', updateFields);
+    console.log('Update values:', updateValues);
+    console.log('Param count:', paramCount);
+
     if (updateFields.length === 0) {
-      console.log(`❌ [ASSIGNMENTS] PUT /${req.params.id} - No updates provided`);
+      console.log('No updates provided');
       return res.status(400).json({ 
         error: 'No updates provided',
         message: 'Please provide at least one field to update'
       });
     }
 
-    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    // Add updated_at field
+    updateFields.push(`updated_at = $${paramCount++}`);
+    updateValues.push(new Date().toISOString());
+    
+    // Add the WHERE clause parameter (assignment ID)
     updateValues.push(id);
 
-    // Start a transaction
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      // Update the assignment
-      const result = await client.query(
-        `UPDATE assignments SET ${updateFields.join(', ')} WHERE id = $${paramCount}
-         RETURNING id, title, description, due_date, priority, topic, updated_at`,
-        updateValues
+      // Get the current assignment values before update
+      const currentAssignment = await client.query(
+        'SELECT id, title, description, due_date, priority, topic FROM assignments WHERE id = $1',
+        [id]
       );
+      
+      if (currentAssignment.rows.length === 0) {
+        throw new Error('Assignment not found');
+      }
+      
+      console.log('Current assignment values:', currentAssignment.rows[0]);
+
+      // Update the assignment
+      const updateQuery = `UPDATE assignments SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING id, title, description, due_date, priority, topic, updated_at`;
+      console.log('Update query:', updateQuery);
+      console.log('Update parameters:', updateValues);
+      
+      const result = await client.query(updateQuery, updateValues);
 
       if (result.rows.length === 0) {
-        console.log(`❌ [ASSIGNMENTS] PUT /${req.params.id} - Assignment not found`);
+        console.log('Assignment not found for update');
         throw new Error('Assignment not found');
       }
 
       const updatedAssignment = result.rows[0];
+      console.log('Assignment updated successfully:', updatedAssignment);
+      console.log('Changes made:');
+      console.log('  Title:', currentAssignment.rows[0].title, '->', updatedAssignment.title);
+      console.log('  Description:', currentAssignment.rows[0].description, '->', updatedAssignment.description);
+      console.log('  Due Date:', currentAssignment.rows[0].due_date, '->', updatedAssignment.due_date);
+      console.log('  Priority:', currentAssignment.rows[0].priority, '->', updatedAssignment.priority);
+      console.log('  Topic:', currentAssignment.rows[0].topic, '->', updatedAssignment.topic);
 
-      // Update student assignments if provided
+      // Handle student assignments
       if (assignedStudents !== undefined) {
-        console.log(`📝 [ASSIGNMENTS] PUT /${req.params.id} - Updating student assignments: ${assignedStudents.length} students`);
-        
-        // Remove existing assignments
-        await client.query(
-          'DELETE FROM assignment_student_assignments WHERE assignment_id = $1',
+        const classResult = await client.query(
+          'SELECT class_id FROM assignments WHERE id = $1',
           [id]
         );
+        
+        if (classResult.rows.length > 0) {
+          const classId = classResult.rows[0].class_id;
+          await handleStudentAssignments(client, id, classId, assignedStudents);
+        }
+      }
 
-        // Add new assignments
-        if (assignedStudents.length > 0) {
-          // Verify all students are enrolled in the class
-          const classResult = await client.query(
-            'SELECT class_id FROM assignments WHERE id = $1',
-            [id]
-          );
-          
-          if (classResult.rows.length > 0) {
-            const classId = classResult.rows[0].class_id;
-            const enrolledStudents = await client.query(
-              `SELECT student_id FROM class_enrollments WHERE class_id = $1 AND student_id = ANY($2)`,
-              [classId, assignedStudents]
-            );
+      // Update calendar event
+      console.log('Looking for existing calendar event...');
+      const existingEvent = await client.query(
+        `SELECT id FROM calendar_events WHERE event_type = 'assignment' AND class_id = (
+          SELECT class_id FROM assignments WHERE id = $1
+        )`,
+        [id]
+      );
+      
+      console.log('Existing calendar event found:', existingEvent.rows);
 
-            if (enrolledStudents.rows.length !== assignedStudents.length) {
-              console.log(`❌ [ASSIGNMENTS] PUT /${req.params.id} - Error: Some students are not enrolled in class ${classId}`);
-              throw new Error('Some students are not enrolled in this class');
-            }
-
-            // Insert new student assignments
-            for (const studentId of assignedStudents) {
-              await client.query(
-                `INSERT INTO assignment_student_assignments (assignment_id, student_id)
-                 VALUES ($1, $2)`,
-                [id, studentId]
-              );
-            }
-            console.log(`✅ [ASSIGNMENTS] PUT /${req.params.id} - Successfully updated student assignments`);
-          }
+      if (existingEvent.rows.length > 0) {
+        console.log('Updating existing calendar event...');
+        await updateCalendarEvent(client, updatedAssignment, null, existingEvent.rows[0].id);
+      } else {
+        console.log('Creating new calendar event...');
+        const classResult = await client.query(
+          'SELECT class_id FROM assignments WHERE id = $1',
+          [id]
+        );
+        
+        if (classResult.rows.length > 0) {
+          const classId = classResult.rows[0].class_id;
+          await createCalendarEvent(client, updatedAssignment, classId, req.user.id);
         }
       }
 
       await client.query('COMMIT');
 
-      console.log(`✅ [ASSIGNMENTS] PUT /${req.params.id} - Success: Updated assignment "${updatedAssignment.title}"`);
+      // Verify the update was actually committed to the database
+      const verificationResult = await client.query(
+        'SELECT id, title, description, due_date, priority, topic, updated_at FROM assignments WHERE id = $1',
+        [id]
+      );
       
+      if (verificationResult.rows.length > 0) {
+        console.log('Database verification - Final assignment values:', verificationResult.rows[0]);
+      }
+
+      const responseAssignment = mapAssignmentRow(updatedAssignment);
+      console.log('Sending update response:', responseAssignment);
+
       res.json({
         message: 'Assignment updated successfully',
-        assignment: {
-          id: updatedAssignment.id,
-          title: updatedAssignment.title,
-          description: updatedAssignment.description,
-          dueDate: updatedAssignment.due_date ? new Date(updatedAssignment.due_date).toISOString() : null,
-          priority: updatedAssignment.priority,
-          topic: updatedAssignment.topic,
-          updatedAt: updatedAssignment.updated_at
-        }
+        assignment: responseAssignment
       });
     } catch (error) {
       await client.query('ROLLBACK');
@@ -551,7 +574,7 @@ router.put('/:id', authenticateToken, requireRole(['teacher']), requireOwnership
       client.release();
     }
   } catch (error) {
-    console.error('Assignment update error:', error);
+    console.error('Error updating assignment:', error);
     res.status(500).json({ 
       error: 'Assignment update failed',
       message: 'An error occurred while updating the assignment'
@@ -561,30 +584,53 @@ router.put('/:id', authenticateToken, requireRole(['teacher']), requireOwnership
 
 // Delete assignment (teacher who created it)
 router.delete('/:id', authenticateToken, requireRole(['teacher']), requireOwnership('assignments', 'id', 'created_by'), async (req, res) => {
-  console.log(`🗑️ [ASSIGNMENTS] DELETE /${req.params.id} - User: ${req.user.first_name} ${req.user.last_name} (${req.user.role})`);
-  
   try {
     const { id } = req.params;
 
-    const result = await pool.query(
-      'DELETE FROM assignments WHERE id = $1 RETURNING id',
-      [id]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (result.rows.length === 0) {
-      console.log(`❌ [ASSIGNMENTS] DELETE /${id} - Assignment not found`);
-      return res.status(404).json({ 
-        error: 'Assignment not found',
-        message: 'The requested assignment does not exist'
+      // Get assignment info before deletion
+      const assignmentResult = await client.query(
+        'SELECT id, title, class_id FROM assignments WHERE id = $1',
+        [id]
+      );
+
+      if (assignmentResult.rows.length === 0) {
+        return res.status(404).json({ 
+          error: 'Assignment not found',
+          message: 'The requested assignment does not exist'
+        });
+      }
+
+      const assignment = assignmentResult.rows[0];
+
+      // Delete the assignment
+      await client.query('DELETE FROM assignments WHERE id = $1', [id]);
+
+      // Delete corresponding calendar event
+      await client.query(
+        `DELETE FROM calendar_events 
+         WHERE event_type = 'assignment' 
+         AND title = $1 
+         AND class_id = $2`,
+        [assignment.title, assignment.class_id]
+      );
+
+      await client.query('COMMIT');
+
+      res.json({
+        message: 'Assignment deleted successfully'
       });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
-
-    console.log(`✅ [ASSIGNMENTS] DELETE /${id} - Success: Assignment deleted`);
-    res.json({
-      message: 'Assignment deleted successfully'
-    });
   } catch (error) {
-    console.error(`❌ [ASSIGNMENTS] DELETE /${req.params.id} - Error:`, error.message);
+    console.error('Error deleting assignment:', error);
     res.status(500).json({ 
       error: 'Assignment deletion failed',
       message: 'An error occurred while deleting the assignment'
@@ -606,38 +652,32 @@ router.post('/:id/submit', authenticateToken, requireRole(['student']), [
       });
     }
 
-    const { id: assignmentId } = req.params;
+    const { id } = req.params;
     const { submissionText, fileUrl } = req.body;
 
-    if (!submissionText && !fileUrl) {
-      return res.status(400).json({ 
-        error: 'Submission content required',
-        message: 'Please provide either submission text or a file'
-      });
-    }
-
     // Check if student is enrolled in the class
-    const enrollmentResult = await pool.query(`
-      SELECT ce.id FROM class_enrollments ce
-      INNER JOIN assignments a ON ce.class_id = a.class_id
-      WHERE a.id = $1 AND ce.student_id = $2
-    `, [assignmentId, req.user.id]);
+    const enrollmentCheck = await pool.query(
+      `SELECT 1 FROM class_enrollments ce
+       INNER JOIN assignments a ON ce.class_id = a.class_id
+       WHERE a.id = $1 AND ce.student_id = $2`,
+      [id, req.user.id]
+    );
 
-    if (enrollmentResult.rows.length === 0) {
+    if (enrollmentCheck.rows.length === 0) {
       return res.status(403).json({ 
         error: 'Access denied',
-        message: 'You are not enrolled in the class for this assignment'
+        message: 'You can only submit assignments for classes you are enrolled in'
       });
     }
 
     // Check if already submitted
     const existingSubmission = await pool.query(
       'SELECT id FROM assignment_submissions WHERE assignment_id = $1 AND student_id = $2',
-      [assignmentId, req.user.id]
+      [id, req.user.id]
     );
 
     if (existingSubmission.rows.length > 0) {
-      return res.status(409).json({ 
+      return res.status(400).json({ 
         error: 'Already submitted',
         message: 'You have already submitted this assignment'
       });
@@ -648,20 +688,18 @@ router.post('/:id/submit', authenticateToken, requireRole(['student']), [
       `INSERT INTO assignment_submissions (assignment_id, student_id, submission_text, file_url)
        VALUES ($1, $2, $3, $4)
        RETURNING id, submitted_at`,
-      [assignmentId, req.user.id, submissionText, fileUrl]
+      [id, req.user.id, submissionText, fileUrl]
     );
-
-    const submission = result.rows[0];
 
     res.status(201).json({
       message: 'Assignment submitted successfully',
       submission: {
-        id: submission.id,
-        submittedAt: submission.submitted_at
+        id: result.rows[0].id,
+        submittedAt: result.rows[0].submitted_at
       }
     });
   } catch (error) {
-    console.error('Assignment submission error:', error);
+    console.error('Error submitting assignment:', error);
     res.status(500).json({ 
       error: 'Assignment submission failed',
       message: 'An error occurred while submitting the assignment'
@@ -669,9 +707,48 @@ router.post('/:id/submit', authenticateToken, requireRole(['student']), [
   }
 });
 
+// Get assignment submissions (teachers only)
+router.get('/:id/submissions', authenticateToken, requireRole(['teacher']), requireOwnership('assignments', 'id', 'created_by'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `SELECT 
+        ass.id, ass.submission_text, ass.file_url, ass.submitted_at, ass.grade,
+        u.first_name, u.last_name, u.email
+       FROM assignment_submissions ass
+       INNER JOIN users u ON ass.student_id = u.id
+       WHERE ass.assignment_id = $1
+       ORDER BY ass.submitted_at ASC`,
+      [id]
+    );
+
+    const submissions = result.rows.map(row => ({
+      id: row.id,
+      submissionText: row.submission_text,
+      fileUrl: row.file_url,
+      submittedAt: row.submitted_at,
+      grade: row.grade,
+      student: {
+        firstName: row.first_name,
+        lastName: row.last_name,
+        email: row.email
+      }
+    }));
+
+    res.json({ submissions });
+  } catch (error) {
+    console.error('Error fetching submissions:', error);
+    res.status(500).json({ 
+      error: 'Submissions fetch failed',
+      message: 'An error occurred while fetching submissions'
+    });
+  }
+});
+
 // Grade assignment submission (teachers only)
-router.put('/:id/grade/:submissionId', authenticateToken, requireRole(['teacher']), [
-  body('grade').isFloat({ min: 0, max: 100 }),
+router.put('/:id/grade/:submissionId', authenticateToken, requireRole(['teacher']), requireOwnership('assignments', 'id', 'created_by'), [
+  body('grade').isFloat({ min: 0, max: 100 }).withMessage('Grade must be between 0 and 100'),
   body('feedback').optional().trim()
 ], async (req, res) => {
   try {
@@ -683,68 +760,56 @@ router.put('/:id/grade/:submissionId', authenticateToken, requireRole(['teacher'
       });
     }
 
-    const { id: assignmentId, submissionId } = req.params;
+    const { id, submissionId } = req.params;
     const { grade, feedback } = req.body;
 
-    // Check if teacher owns the assignment
-    const assignmentResult = await pool.query(
-      'SELECT id FROM assignments WHERE id = $1 AND created_by = $2',
-      [assignmentId, req.user.id]
+    // Verify submission belongs to this assignment
+    const submissionCheck = await pool.query(
+      'SELECT 1 FROM assignment_submissions WHERE id = $1 AND assignment_id = $2',
+      [submissionId, id]
     );
 
-    if (assignmentResult.rows.length === 0) {
-      return res.status(403).json({ 
-        error: 'Access denied',
-        message: 'You can only grade assignments you created'
-      });
-    }
-
-    // Update submission grade
-    const result = await pool.query(
-      `UPDATE assignment_submissions 
-       SET grade = $1, feedback = $2, graded_by = $3, graded_at = CURRENT_TIMESTAMP
-       WHERE id = $4 AND assignment_id = $5
-       RETURNING id, grade, feedback, graded_at`,
-      [grade, feedback, req.user.id, submissionId, assignmentId]
-    );
-
-    if (result.rows.length === 0) {
+    if (submissionCheck.rows.length === 0) {
       return res.status(404).json({ 
         error: 'Submission not found',
         message: 'The requested submission does not exist'
       });
     }
 
-    const gradedSubmission = result.rows[0];
+    // Update grade
+    const result = await pool.query(
+      `UPDATE assignment_submissions 
+       SET grade = $1, feedback = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING id, grade, feedback, updated_at`,
+      [grade, feedback, submissionId]
+    );
 
     res.json({
-      message: 'Assignment graded successfully',
+      message: 'Grade updated successfully',
       submission: {
-        id: gradedSubmission.id,
-        grade: gradedSubmission.grade,
-        feedback: gradedSubmission.feedback,
-        gradedAt: gradedSubmission.graded_at
+        id: result.rows[0].id,
+        grade: result.rows[0].grade,
+        feedback: result.rows[0].feedback,
+        updatedAt: result.rows[0].updated_at
       }
     });
   } catch (error) {
-    console.error('Assignment grading error:', error);
+    console.error('Error updating grade:', error);
     res.status(500).json({ 
-      error: 'Assignment grading failed',
-      message: 'An error occurred while grading the assignment'
+      error: 'Grade update failed',
+      message: 'An error occurred while updating the grade'
     });
   }
 });
 
 // Upload assignment attachment
 router.post('/:id/attachments', authenticateToken, requireRole(['teacher']), requireOwnership('assignments', 'id', 'created_by'), [
-  body('fileName').trim().isLength({ min: 1, max: 255 }),
-  body('fileUrl').isURL(),
-  body('fileSize').isInt({ min: 1 }),
-  body('fileType').trim().isLength({ min: 1, max: 100 })
+  body('name').trim().isLength({ min: 1, max: 255 }),
+  body('url').isURL(),
+  body('size').isInt({ min: 1 }),
+  body('type').trim().isLength({ min: 1, max: 100 })
 ], async (req, res) => {
-  console.log(`📎 [ASSIGNMENTS] POST /${req.params.id}/attachments - User: ${req.user.first_name} ${req.user.last_name} (${req.user.role})`);
-  console.log(`📎 [ASSIGNMENTS] POST /${req.params.id}/attachments - File: ${req.body.fileName} (${req.body.fileSize} bytes, ${req.body.fileType})`);
-  
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -754,33 +819,29 @@ router.post('/:id/attachments', authenticateToken, requireRole(['teacher']), req
       });
     }
 
-    const { id: assignmentId } = req.params;
-    const { fileName, fileUrl, fileSize, fileType } = req.body;
+    const { id } = req.params;
+    const { name, url, size, type } = req.body;
 
     const result = await pool.query(
-      `INSERT INTO assignment_attachments (assignment_id, file_name, file_url, file_size, file_type)
+      `INSERT INTO assignment_attachments (assignment_id, name, url, size, type)
        VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, file_name, file_url, file_size, file_type, uploaded_at`,
-      [assignmentId, fileName, fileUrl, fileSize, fileType]
+       RETURNING id, name, url, size, type, uploaded_at`,
+      [id, name, url, size, type]
     );
 
-    const attachment = result.rows[0];
-
-    console.log(`✅ [ASSIGNMENTS] POST /${req.params.id}/attachments - Success: Uploaded "${attachment.file_name}" (ID: ${attachment.id})`);
-    
     res.status(201).json({
       message: 'Attachment uploaded successfully',
       attachment: {
-        id: attachment.id,
-        name: attachment.file_name,
-        url: attachment.file_url,
-        size: attachment.file_size,
-        type: attachment.file_type,
-        uploadedAt: attachment.uploaded_at
+        id: result.rows[0].id,
+        name: result.rows[0].name,
+        url: result.rows[0].url,
+        size: result.rows[0].size,
+        type: result.rows[0].type,
+        uploadedAt: result.rows[0].uploaded_at
       }
     });
   } catch (error) {
-    console.error(`❌ [ASSIGNMENTS] POST /${req.params.id}/attachments - Error:`, error.message);
+    console.error('Error uploading attachment:', error);
     res.status(500).json({ 
       error: 'Attachment upload failed',
       message: 'An error occurred while uploading the attachment'
@@ -788,37 +849,4 @@ router.post('/:id/attachments', authenticateToken, requireRole(['teacher']), req
   }
 });
 
-// Delete assignment attachment
-router.delete('/:id/attachments/:attachmentId', authenticateToken, requireRole(['teacher']), requireOwnership('assignments', 'id', 'created_by'), async (req, res) => {
-  console.log(`🗑️ [ASSIGNMENTS] DELETE /${req.params.id}/attachments/${req.params.attachmentId} - User: ${req.user.first_name} ${req.user.last_name} (${req.user.role})`);
-  
-  try {
-    const { id: assignmentId, attachmentId } = req.params;
-
-    const result = await pool.query(
-      'DELETE FROM assignment_attachments WHERE id = $1 AND assignment_id = $2 RETURNING id',
-      [attachmentId, assignmentId]
-    );
-
-    if (result.rows.length === 0) {
-      console.log(`❌ [ASSIGNMENTS] DELETE /${assignmentId}/attachments/${attachmentId} - Attachment not found`);
-      return res.status(404).json({ 
-        error: 'Attachment not found',
-        message: 'The requested attachment does not exist'
-      });
-    }
-
-    console.log(`✅ [ASSIGNMENTS] DELETE /${assignmentId}/attachments/${attachmentId} - Success: Attachment deleted`);
-    res.json({
-      message: 'Attachment deleted successfully'
-    });
-  } catch (error) {
-    console.error(`❌ [ASSIGNMENTS] DELETE /${req.params.id}/attachments/${req.params.attachmentId} - Error:`, error.message);
-    res.status(500).json({ 
-      error: 'Attachment deletion failed',
-      message: 'An error occurred while deleting the attachment'
-    });
-  }
-});
-
-module.exports = router; 
+module.exports = router;

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import Tabs from './Tabs';
+import { Tabs } from '../../../components/ui';
 import ClassCard from './ClassCard';
 import { Code } from 'lucide-react';
-import { type Class } from '../types';
+import { type Class } from '../../../types';
 
 interface ClassesProps {
   classes: Class[];

@@ -1,5 +1,5 @@
 import React from 'react';
-import Button from './Button';
+import { Button } from '../ui';
 import { Plus, LogIn, Bell, User, LogOut } from 'lucide-react';
 
 interface HeaderProps {

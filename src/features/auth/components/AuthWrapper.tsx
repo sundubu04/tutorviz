@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import Login from './Login';
 import Register from './Register';
 
@@ -36,6 +36,7 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
             }}
             isLoading={isLoading}
             error={error}
+            clearError={clearError}
           />
         ) : (
           <Register

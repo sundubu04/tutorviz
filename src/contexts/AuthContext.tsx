@@ -51,7 +51,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(response.user);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed';
-      setError(errorMessage);
+      // Provide more user-friendly error messages
+      let userFriendlyError = errorMessage;
+      if (errorMessage.includes('Invalid credentials') || errorMessage.includes('Email or password is incorrect')) {
+        userFriendlyError = 'Invalid email or password. Please try again.';
+      } else if (errorMessage.includes('Validation failed')) {
+        userFriendlyError = 'Please check your input and try again.';
+      } else if (errorMessage.includes('Login failed')) {
+        userFriendlyError = 'Unable to sign in. Please try again later.';
+      }
+      setError(userFriendlyError);
       throw error;
     } finally {
       setIsLoading(false);
@@ -67,7 +76,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(response.user);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Registration failed';
-      setError(errorMessage);
+      // Provide more user-friendly error messages
+      let userFriendlyError = errorMessage;
+      if (errorMessage.includes('User already exists') || errorMessage.includes('already exists')) {
+        userFriendlyError = 'An account with this email already exists. Please sign in instead.';
+      } else if (errorMessage.includes('Validation failed')) {
+        userFriendlyError = 'Please check your input and try again.';
+      } else if (errorMessage.includes('Registration failed')) {
+        userFriendlyError = 'Unable to create account. Please try again later.';
+      }
+      setError(userFriendlyError);
       throw error;
     } finally {
       setIsLoading(false);

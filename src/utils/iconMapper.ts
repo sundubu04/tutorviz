@@ -17,40 +17,62 @@ import {
   Target
 } from 'lucide-react';
 
-const iconMap: Record<string, React.ComponentType<any>> = {
-  'BookOpen': BookOpen,
-  'Code': Code,
-  'Monitor': Monitor,
-  'FileCode': FileCode,
-  'Cpu': Cpu,
-  'Database': Database,
-  'Globe': Globe,
-  'Calculator': Calculator,
-  'Palette': Palette,
-  'Music': Music,
-  'Camera': Camera,
-  'Heart': Heart,
-  'Zap': Zap,
-  'Star': Star,
-  'Target': Target
-};
+// Icon mapping with consistent naming
+export const ICONS = {
+  BookOpen,
+  Code,
+  Monitor,
+  FileCode,
+  Cpu,
+  Database,
+  Globe,
+  Calculator,
+  Palette,
+  Music,
+  Camera,
+  Heart,
+  Zap,
+  Star,
+  Target
+} as const;
 
-const normalizeIconName = (iconName: string): string => {
+export type IconName = keyof typeof ICONS;
+
+// Normalize icon name to handle different formats
+const normalizeIconName = (iconName: string): IconName => {
   if (!iconName) return 'BookOpen';
   
+  // If the icon name is already in PascalCase, return as is
+  if (/^[A-Z][a-zA-Z]*$/.test(iconName) && iconName in ICONS) {
+    return iconName as IconName;
+  }
+  
   // Convert kebab-case to PascalCase
-  return iconName
+  const normalized = iconName
     .split('-')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join('');
+    
+  return (normalized in ICONS ? normalized : 'BookOpen') as IconName;
 };
 
+// Create icon element with default styling
+export const createIconElement = (
+  iconName: string, 
+  className: string = "w-6 h-6 text-white"
+): React.ReactNode => {
+  const normalizedName = normalizeIconName(iconName);
+  const IconComponent = ICONS[normalizedName];
+  return React.createElement(IconComponent, { className });
+};
+
+// Get icon component directly (useful for custom rendering)
 export const getIconComponent = (iconName: string): React.ComponentType<any> => {
   const normalizedName = normalizeIconName(iconName);
-  return iconMap[normalizedName] || BookOpen;
+  return ICONS[normalizedName];
 };
 
-export const createIconElement = (iconName: string, className: string = "w-6 h-6 text-white"): React.ReactNode => {
-  const IconComponent = getIconComponent(iconName);
-  return React.createElement(IconComponent, { className });
+// Get all available icon names
+export const getAvailableIconNames = (): IconName[] => {
+  return Object.keys(ICONS) as IconName[];
 }; 

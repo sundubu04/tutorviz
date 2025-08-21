@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { X, CheckCircle, Circle, Clock, BookOpen } from 'lucide-react';
-import { type TodoItem } from '../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, CheckCircle, Circle, Clock, BookOpen, Move } from 'lucide-react';
+import { type TodoItem } from '../../../types';
 
 interface TodoSidebarProps {
   todos: TodoItem[];
@@ -80,6 +80,36 @@ const TodoSidebar: React.FC<TodoSidebarProps> = ({
   onTodoDelete
 }) => {
   const [isVisible, setIsVisible] = useState(false);
+  const [buttonPosition, setButtonPosition] = useState(() => {
+    // Calculate default bottom-right position (equivalent to right-6 bottom-6)
+    const buttonSize = 64; // 4 * 16 (p-4 = 16px padding)
+    const margin = 24; // 6 * 4 (right-6 bottom-6 = 24px)
+    return {
+      x: window.innerWidth - buttonSize - margin,
+      y: window.innerHeight - buttonSize - margin
+    };
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Load saved position from localStorage on component mount
+  useEffect(() => {
+    const savedPosition = localStorage.getItem('todoButtonPosition');
+    if (savedPosition) {
+      try {
+        const position = JSON.parse(savedPosition);
+        setButtonPosition(position);
+      } catch (error) {
+        console.error('Failed to parse saved position:', error);
+      }
+    }
+  }, []);
+
+  // Save position to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('todoButtonPosition', JSON.stringify(buttonPosition));
+  }, [buttonPosition]);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -90,19 +120,85 @@ const TodoSidebar: React.FC<TodoSidebarProps> = ({
     }
   }, [isOpen]);
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Only left mouse button
+    
+    setIsDragging(true);
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect) {
+      setDragOffset({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      });
+    }
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return;
+
+    const newX = e.clientX - dragOffset.x;
+    const newY = e.clientY - dragOffset.y;
+
+    // Get viewport dimensions
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const buttonSize = 64; // 4 * 16 (p-4 = 16px padding)
+
+    // Constrain button to viewport bounds
+    const constrainedX = Math.max(0, Math.min(newX, viewportWidth - buttonSize));
+    const constrainedY = Math.max(0, Math.min(newY, viewportHeight - buttonSize));
+
+    setButtonPosition({ x: constrainedX, y: constrainedY });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    // Only toggle if we weren't dragging
+    if (!isDragging) {
+      onToggle();
+    }
+  };
+
+  // Add global mouse event listeners
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, dragOffset]);
+
   const urgentTodos = todos.filter(todo => todo.urgent);
   const completedTodos = todos.filter(todo => todo.completed);
   const pendingTodos = todos.filter(todo => !todo.completed);
 
   return (
     <>
-      {/* Toggle Button */}
+      {/* Draggable Toggle Button */}
       <button
-        onClick={onToggle}
+        ref={buttonRef}
+        onClick={handleClick}
+        onMouseDown={handleMouseDown}
         className={`
-          fixed right-6 bottom-6 z-50 p-4 rounded-full shadow-lg transition-all duration-300
+          fixed z-50 p-4 rounded-full shadow-lg transition-all duration-300 cursor-move
           ${isOpen ? 'bg-red-500 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}
+          ${isDragging ? 'scale-110 shadow-2xl' : ''}
         `}
+        style={{
+          left: `${buttonPosition.x}px`,
+          top: `${buttonPosition.y}px`,
+          userSelect: 'none',
+          touchAction: 'none'
+        }}
+        title="Drag to move • Click to toggle"
       >
         <div className="relative">
           <Clock className="w-6 h-6" />
@@ -111,6 +207,8 @@ const TodoSidebar: React.FC<TodoSidebarProps> = ({
               {pendingTodos.length}
             </span>
           )}
+          {/* Drag indicator */}
+          <Move className="absolute -bottom-1 -right-1 w-3 h-3 opacity-50" />
         </div>
       </button>
 
