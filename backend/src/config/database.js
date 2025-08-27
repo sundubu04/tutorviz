@@ -1,7 +1,7 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// Database connection pool
+// Database connection configuration
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
@@ -14,20 +14,47 @@ const pool = new Pool({
 });
 
 // Test database connection
-pool.on('connect', () => {
-  console.log('Connected to PostgreSQL database');
-});
+const testConnection = async () => {
+  try {
+    const client = await pool.connect();
+    console.log('✅ Database connection successful');
+    client.release();
+    return true;
+  } catch (error) {
+    console.error('❌ Database connection failed:', error);
+    return false;
+  }
+};
 
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
-});
+// Database initialization with table creation
+const initializeDatabase = async () => {
+  try {
+    console.log('📊 Initializing TutoriAI Database...');
+    
+    // Test connection first
+    const isConnected = await testConnection();
+    if (!isConnected) {
+      throw new Error('Cannot connect to database');
+    }
 
-// Database schema creation
+    // Create tables
+    await createTables();
+    
+    console.log('✅ Database initialization completed successfully!');
+    return true;
+  } catch (error) {
+    console.error('❌ Database initialization failed:', error);
+    throw error;
+  }
+};
+
+// Create database tables
 const createTables = async () => {
+  const client = await pool.connect();
+  
   try {
     // Users table
-    await pool.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -35,40 +62,25 @@ const createTables = async () => {
         first_name VARCHAR(100) NOT NULL,
         last_name VARCHAR(100) NOT NULL,
         role VARCHAR(20) NOT NULL DEFAULT 'student',
-        avatar_url VARCHAR(500),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
     // Classes table
-    await pool.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS classes (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR(255) NOT NULL,
         description TEXT,
-        icon_name VARCHAR(100),
-        icon_color VARCHAR(50),
         teacher_id UUID REFERENCES users(id) ON DELETE CASCADE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Add unique constraint for class names per teacher (if it doesn't exist)
-    try {
-      await pool.query(`
-        ALTER TABLE classes 
-        ADD CONSTRAINT unique_class_name_per_teacher 
-        UNIQUE (name, teacher_id)
-      `);
-    } catch (error) {
-      // Constraint might already exist, ignore the error
-      console.log('Unique constraint check completed');
-    }
-
     // Class enrollments table
-    await pool.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS class_enrollments (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
@@ -79,233 +91,157 @@ const createTables = async () => {
     `);
 
     // Assignments table
-    await pool.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS assignments (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         title VARCHAR(255) NOT NULL,
         description TEXT,
         class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
-        due_date TIMESTAMP NOT NULL,
-        created_by UUID REFERENCES users(id) ON DELETE CASCADE,
-        priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
-        topic VARCHAR(255),
+        due_date TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Assignment attachments table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS assignment_attachments (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
-        name VARCHAR(255) NOT NULL,
-        url VARCHAR(500) NOT NULL,
-        size INTEGER NOT NULL,
-        type VARCHAR(100) NOT NULL,
-        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Assignment student assignments table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS assignment_student_assignments (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
-        student_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(assignment_id, student_id)
-      )
-    `);
-
     // Assignment submissions table
-    await pool.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS assignment_submissions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE,
         student_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        submission_text TEXT,
-        file_url VARCHAR(500),
+        content TEXT,
+        file_path VARCHAR(500),
         submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         grade DECIMAL(5,2),
-        feedback TEXT,
-        graded_by UUID REFERENCES users(id),
-        graded_at TIMESTAMP
+        feedback TEXT
       )
     `);
 
     // Calendar events table
-    await pool.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS calendar_events (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         title VARCHAR(255) NOT NULL,
         description TEXT,
         start_time TIMESTAMP NOT NULL,
         end_time TIMESTAMP NOT NULL,
-        event_type VARCHAR(50) NOT NULL,
-        class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
-        created_by UUID REFERENCES users(id) ON DELETE SET NULL,
-        is_all_day BOOLEAN DEFAULT FALSE,
+        class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
+        created_by UUID REFERENCES users(id) ON DELETE CASCADE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Update existing calendar_events table to allow NULL created_by if it exists
-    try {
-      await pool.query(`
-        ALTER TABLE calendar_events 
-        ALTER COLUMN created_by DROP NOT NULL
-      `);
-    } catch (error) {
-      // Column might already be nullable or table might not exist, ignore the error
-      console.log('Calendar events table update check completed');
-    }
-
-
-    console.log('Database tables created successfully');
-    
-    // Sync existing assignments to calendar events
-    await syncAssignmentsToCalendar();
-  } catch (error) {
-    console.error('Error creating database tables:', error);
-    throw error;
-  }
-};
-
-// Function to sync existing assignments to calendar events
-const syncAssignmentsToCalendar = async () => {
-  try {
-    console.log('🔄 Syncing existing assignments to calendar events...');
-    
-    // Get all assignments that don't have corresponding calendar events
-    const result = await pool.query(`
-      SELECT 
-        a.id, a.title, a.description, a.due_date, a.class_id, a.created_by
-      FROM assignments a
-      WHERE NOT EXISTS (
-        SELECT 1 FROM calendar_events ce 
-        WHERE ce.event_type = 'assignment' 
-        AND ce.title = a.title 
-        AND ce.class_id = a.class_id
+    // Tasks table for TaskMaker functionality
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        content TEXT NOT NULL,
+        task_type VARCHAR(50) NOT NULL DEFAULT 'general',
+        difficulty_level VARCHAR(20) DEFAULT 'medium',
+        estimated_time INTEGER DEFAULT 30,
+        class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
+        created_by UUID REFERENCES users(id) ON DELETE CASCADE,
+        is_active BOOLEAN DEFAULT true,
+        tags TEXT[],
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    
-    if (result.rows.length > 0) {
-      console.log(`📅 Found ${result.rows.length} assignments to sync to calendar`);
-      
-      for (const assignment of result.rows) {
-        try {
-          await pool.query(
-            `INSERT INTO calendar_events (title, description, start_time, end_time, event_type, class_id, is_all_day, created_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [
-              assignment.title,
-              assignment.description || `Assignment due for ${assignment.title}`,
-              assignment.due_date,
-              new Date(new Date(assignment.due_date).getTime() + 24 * 60 * 60 * 1000),
-              'assignment',
-              assignment.class_id,
-              true,
-              assignment.created_by
-            ]
-          );
-        } catch (error) {
-          console.error(`❌ Failed to sync assignment ${assignment.id} to calendar:`, error);
-        }
-      }
-      
-      console.log(`✅ Successfully synced ${result.rows.length} assignments to calendar events`);
-    } else {
-      console.log('✅ All assignments are already synced to calendar events');
-    }
-  } catch (error) {
-    console.error('❌ Error syncing assignments to calendar:', error);
-    // Don't fail the setup if sync fails
+
+    console.log('✅ Database tables created successfully');
+  } finally {
+    client.release();
   }
 };
 
-// Migration function to update existing assignments table
-const migrateAssignmentsTable = async () => {
+// Insert sample data
+const insertSampleData = async () => {
+  const client = await pool.connect();
+  
   try {
-    // Check if is_urgent column exists
-    const columnCheck = await pool.query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = 'assignments' AND column_name = 'is_urgent'
-    `);
-    
-    if (columnCheck.rows.length > 0) {
-      // Add priority column if it doesn't exist
-      try {
-        await pool.query(`
-          ALTER TABLE assignments 
-          ADD COLUMN priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent'))
-        `);
-        console.log('Added priority column to assignments table');
-      } catch (error) {
-        console.log('Priority column might already exist');
-      }
-
-      // Add topic column if it doesn't exist
-      try {
-        await pool.query(`
-          ALTER TABLE assignments 
-          ADD COLUMN topic VARCHAR(255)
-        `);
-        console.log('Added topic column to assignments table');
-      } catch (error) {
-        console.log('Topic column might already exist');
-      }
-
-      // Migrate existing is_urgent data to priority
-      await pool.query(`
-        UPDATE assignments 
-        SET priority = CASE 
-          WHEN is_urgent = true THEN 'urgent' 
-          ELSE 'normal' 
-        END 
-        WHERE priority IS NULL
-      `);
-      console.log('Migrated is_urgent data to priority');
-
-      // Remove is_urgent column
-      try {
-        await pool.query(`
-          ALTER TABLE assignments 
-          DROP COLUMN is_urgent
-        `);
-        console.log('Removed is_urgent column from assignments table');
-      } catch (error) {
-        console.log('is_urgent column might already be removed');
-      }
+    // Check if sample data already exists
+    const userCount = await client.query('SELECT COUNT(*) FROM users');
+    if (parseInt(userCount.rows[0].count) > 0) {
+      console.log('📝 Sample data already exists, skipping...');
+      return;
     }
 
-    console.log('Assignments table migration completed');
-  } catch (error) {
-    console.error('Error migrating assignments table:', error);
-    throw error;
+    // Insert sample teacher
+    const teacherResult = await client.query(`
+      INSERT INTO users (email, password_hash, first_name, last_name, role)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id
+    `, ['teacher@tutoriai.com', '$2a$10$rQZ9K8mN2pL1qR3sT5uV7w', 'John', 'Doe', 'teacher']);
+
+    const teacherId = teacherResult.rows[0].id;
+
+    // Insert sample student
+    const studentResult = await client.query(`
+      INSERT INTO users (email, password_hash, first_name, last_name, role)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id
+    `, ['student@tutoriai.com', '$2a$10$rQZ9K8mN2pL1qR3sT5uV7w', 'Jane', 'Smith', 'student']);
+
+    const studentId = studentResult.rows[0].id;
+
+    // Insert sample class
+    const classResult = await client.query(`
+      INSERT INTO classes (name, description, teacher_id)
+      VALUES ($1, $2, $3)
+      RETURNING id
+    `, ['Introduction to Computer Science', 'Learn the basics of programming and computer science', teacherId]);
+
+    const classId = classResult.rows[0].id;
+
+    // Enroll student in class
+    await client.query(`
+      INSERT INTO class_enrollments (class_id, student_id)
+      VALUES ($1, $2)
+    `, [classId, studentId]);
+
+    // Insert sample assignment
+    await client.query(`
+      INSERT INTO assignments (title, description, class_id, due_date)
+      VALUES ($1, $2, $3, $4)
+    `, ['First Programming Assignment', 'Create a simple Hello World program', classId, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)]);
+
+    // Insert sample calendar event
+    await client.query(`
+      INSERT INTO calendar_events (title, description, start_time, end_time, class_id, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, ['Class Introduction', 'First day of class introduction', new Date(), new Date(Date.now() + 60 * 60 * 1000), classId, teacherId]);
+
+    // Insert sample task
+    await client.query(`
+      INSERT INTO tasks (title, description, content, task_type, difficulty_level, estimated_time, class_id, created_by, tags)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [
+      'Hello World Program',
+      'Create your first Python program that prints "Hello, World!"',
+      'Write a Python program that prints "Hello, World!" to the console. Make sure to include proper comments and follow Python naming conventions.',
+      'programming',
+      'beginner',
+      15,
+      classId,
+      teacherId,
+      ['python', 'beginner', 'hello-world']
+    ]);
+
+    console.log('✅ Sample data inserted successfully');
+    console.log('👨‍🏫 Sample Teacher: teacher@tutoriai.com (password: password123)');
+    console.log('👨‍🎓 Sample Student: student@tutoriai.com (password: password123)');
+  } finally {
+    client.release();
   }
 };
 
-
-
-// Initialize database
-const initializeDatabase = async () => {
-  try {
-    await createTables();
-    await migrateAssignmentsTable();
-    // Sample data insertion removed - database will be empty
-    console.log('Database initialization completed');
-  } catch (error) {
-    console.error('Database initialization failed:', error);
-    process.exit(1);
-  }
-};
-
-module.exports = {
-  pool,
-  initializeDatabase,
-  createTables,
-  migrateAssignmentsTable
+module.exports = { 
+  pool, 
+  initializeDatabase, 
+  createTables, 
+  insertSampleData, 
+  testConnection 
 }; 

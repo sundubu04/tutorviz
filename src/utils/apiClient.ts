@@ -560,6 +560,8 @@ class ApiClient {
     
     return { attachment: mockAttachment };
   }
+
+
 }
 
 // Create and export a singleton instance

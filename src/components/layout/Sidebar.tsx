@@ -17,6 +17,7 @@ interface SidebarProps {
   onItemClick: (itemId: string) => void;
   onMobileToggle?: () => void;
   isMobileOpen?: boolean;
+  isOpen?: boolean;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -24,7 +25,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeItem,
   onItemClick,
   onMobileToggle,
-  isMobileOpen = false
+  isMobileOpen = false,
+  isOpen = true
 }) => {
   return (
     <>
@@ -37,7 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       )}
       
       {/* Sidebar */}
-      <nav className={`sidebar ${isMobileOpen ? 'open' : ''}`}>
+      <nav className={`sidebar ${isMobileOpen ? 'open' : ''} ${!isOpen ? 'hidden' : ''}`}>
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">

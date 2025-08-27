@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '../ui';
-import { Plus, LogIn, Bell, User, LogOut } from 'lucide-react';
+import { Plus, LogIn, Bell, User, LogOut, Menu } from 'lucide-react';
 
 interface HeaderProps {
   title: string;
@@ -12,6 +12,7 @@ interface HeaderProps {
   userAvatar?: string;
   userRole?: string;
   isAuthenticated?: boolean;
+  onSidebarToggle?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -23,12 +24,22 @@ const Header: React.FC<HeaderProps> = ({
   userName = 'John',
   userAvatar,
   userRole,
-  isAuthenticated
+  isAuthenticated,
+  onSidebarToggle
 }) => {
   return (
     <header className="header">
       <div className="flex items-center justify-between">
-        <div className="flex items-center">
+        <div className="flex items-center space-x-4">
+          {onSidebarToggle && (
+            <button
+              onClick={onSidebarToggle}
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              title="Toggle Sidebar"
+            >
+              <Menu className="w-5 h-5 text-gray-600" />
+            </button>
+          )}
           <h1 className="text-2xl font-semibold">{title}</h1>
         </div>
         
@@ -38,7 +49,7 @@ const Header: React.FC<HeaderProps> = ({
               variant="primary"
               icon={<Plus className="w-4 h-4" />}
               onClick={onAddClass}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
             >
               Add Class
             </Button>

@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 const { initializeDatabase } = require('./config/database');
 
@@ -12,6 +13,8 @@ const classRoutes = require('./routes/classes');
 const assignmentRoutes = require('./routes/assignments');
 const userRoutes = require('./routes/users');
 const calendarRoutes = require('./routes/calendar');
+const latexRoutes = require('./routes/latex.js');
+const taskRoutes = require('./routes/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -61,6 +64,8 @@ app.use('/api/classes', classRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/latex', latexRoutes);
+app.use('/api/tasks', taskRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

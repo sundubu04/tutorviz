@@ -7,6 +7,7 @@ const resetDatabase = async () => {
     // Drop all tables in the correct order (respecting foreign key constraints)
     await pool.query('DROP TABLE IF EXISTS assignment_submissions CASCADE');
     await pool.query('DROP TABLE IF EXISTS assignments CASCADE');
+    await pool.query('DROP TABLE IF EXISTS tasks CASCADE');
     await pool.query('DROP TABLE IF EXISTS calendar_events CASCADE');
     await pool.query('DROP TABLE IF EXISTS class_enrollments CASCADE');
     await pool.query('DROP TABLE IF EXISTS classes CASCADE');

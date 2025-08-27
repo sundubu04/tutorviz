@@ -5,27 +5,30 @@ import { Classes, ClassModal } from './features/classes';
 import { Calendar } from './features/calendar';
 import { Assignments } from './features/assignments';
 import { TodoSidebar } from './features/todos';
-import { TaskMakerPage } from './pages';
+import TasksPage from './pages/TasksPage';
+import TaskEditor from './pages/TaskEditor';
 import { AuthWrapper } from './features/auth';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+// TaskProvider removed
 import { 
   BookOpen, 
   FileText, 
-  PlusSquare, 
+  PlusSquare,
   BarChart3, 
   Settings,
   Calendar as CalendarIcon
 } from 'lucide-react';
-import { apiClient, type Class as ApiClass } from './utils/apiClient';
-import { createIconElement } from './utils/iconMapper';
+import { apiClient } from './utils/apiClient';
 import { type Class, type TodoItem } from './types';
+import { classesService } from './services';
+import { type Class as ApiClass } from './utils/apiClient';
 import './App.css';
 
 const menuItems = [
   { id: 'classes', label: 'Classes', icon: <BookOpen className="w-5 h-5" /> },
   { id: 'calendar', label: 'Calendar', icon: <CalendarIcon className="w-5 h-5" /> },
   { id: 'assignments', label: 'Assignments', icon: <FileText className="w-5 h-5" /> },
-  { id: 'task-maker', label: 'Task Maker', icon: <PlusSquare className="w-5 h-5" /> },
+  { id: 'taskmaker', label: 'TaskMaker', icon: <PlusSquare className="w-5 h-5" /> },
   { id: 'overview', label: 'Overview', icon: <BarChart3 className="w-5 h-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> }
 ];
@@ -35,6 +38,7 @@ function Dashboard() {
   const navigate = useNavigate();
   const [activeMenuItem, setActiveMenuItem] = useState('classes');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isTodoSidebarOpen, setIsTodoSidebarOpen] = useState(false);
   const [classes, setClasses] = useState<Class[]>([]);
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -48,22 +52,8 @@ function Dashboard() {
     try {
       setLoading(true);
       
-      // Fetch classes - use authenticated endpoint if user is logged in
-      let classesResponse;
-      if (apiClient.isAuthenticated()) {
-        classesResponse = await apiClient.getClasses();
-      } else {
-        // If not authenticated, still fetch classes but they'll have type 'public'
-        classesResponse = await apiClient.getClasses();
-      }
-      
-      const apiClasses = classesResponse.classes.map(apiClass => ({
-        ...apiClass,
-        icon: createIconElement(apiClass.iconName),
-        iconName: apiClass.iconName, // Preserve the iconName field
-        teacherName: apiClass.teacherName,
-        createdAt: apiClass.createdAt
-      }));
+      // Fetch classes using the service
+      const apiClasses = await classesService.fetchClasses();
       setClasses(apiClasses);
 
       // Fetch assignments as todos
@@ -94,9 +84,9 @@ function Dashboard() {
   }, []);
 
   const handleMenuItemClick = (itemId: string) => {
-    if (itemId === 'task-maker') {
-      // Navigate to TaskMaker page instead of rendering it in dashboard
-      navigate('/task-maker');
+    if (itemId === 'taskmaker') {
+      // Navigate to tasks page instead of rendering it in dashboard
+      navigate('/tasks');
       return;
     }
     setActiveMenuItem(itemId);
@@ -121,14 +111,9 @@ function Dashboard() {
   };
 
   const handleAddClass = () => {
-    if (!apiClient.isAuthenticated()) {
-      alert('You must be logged in to create classes. Please log in as a teacher.');
-      return;
-    }
-    
-    // Check if user is a teacher
-    if (user?.role !== 'teacher') {
-      alert('Only teachers can create classes. Please log in with a teacher account.');
+    const accessValidation = classesService.validateClassAccess(user?.role);
+    if (!accessValidation.canAccess) {
+      alert(accessValidation.message);
       return;
     }
     
@@ -137,19 +122,8 @@ function Dashboard() {
   };
 
   const handleEditClass = (classData: Class) => {
-    // Convert Class type to ApiClass type for editing
-    const apiClass: ApiClass = {
-      id: classData.id,
-      name: classData.name,
-      description: classData.description,
-      iconName: classData.iconName, // Use the actual icon name from the class data
-      iconColor: classData.iconColor,
-      teacherName: classData.teacherName || 'Teacher', // Use existing teacher name if available
-      studentCount: classData.studentCount,
-      assignmentCount: classData.assignmentCount,
-      type: classData.type,
-      createdAt: classData.createdAt || new Date().toISOString() // Use existing createdAt if available
-    };
+    // Convert Class type to ApiClass type for editing using the service
+    const apiClass = classesService.convertClassToApiClass(classData);
     setEditingClass(apiClass);
     setIsClassModalOpen(true);
   };
@@ -160,16 +134,9 @@ function Dashboard() {
     }
 
     try {
-      await apiClient.deleteClass(classId);
+      await classesService.deleteClass(classId);
       // Refresh classes after deletion
-      const classesResponse = await apiClient.getClasses();
-      const apiClasses = classesResponse.classes.map(apiClass => ({
-        ...apiClass,
-        icon: createIconElement(apiClass.iconName),
-        iconName: apiClass.iconName, // Preserve the iconName field
-        teacherName: apiClass.teacherName,
-        createdAt: apiClass.createdAt
-      }));
+      const apiClasses = await classesService.fetchClasses();
       setClasses(apiClasses);
     } catch (error) {
       console.error('Error deleting class:', error);
@@ -180,14 +147,7 @@ function Dashboard() {
   const handleClassModalSave = async () => {
     // Refresh classes after save
     try {
-      const classesResponse = await apiClient.getClasses();
-      const apiClasses = classesResponse.classes.map(apiClass => ({
-        ...apiClass,
-        icon: createIconElement(apiClass.iconName),
-        iconName: apiClass.iconName, // Preserve the iconName field
-        teacherName: apiClass.teacherName,
-        createdAt: apiClass.createdAt
-      }));
+      const apiClasses = await classesService.fetchClasses();
       setClasses(apiClasses);
     } catch (error) {
       console.error('Error refreshing classes:', error);
@@ -268,9 +228,10 @@ function Dashboard() {
         onItemClick={handleMenuItemClick}
         onMobileToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         isMobileOpen={isMobileMenuOpen}
+        isOpen={isSidebarOpen}
       />
       
-      <div className="main-content">
+      <div className={`main-content ${!isSidebarOpen ? 'sidebar-hidden' : ''}`}>
         <Header
           title={getPageTitle()}
           onAddClass={shouldShowHeaderActions ? handleAddClass : undefined}
@@ -280,6 +241,7 @@ function Dashboard() {
           userName={`${user?.firstName} ${user?.lastName}`}
           userRole={user?.role}
           isAuthenticated={apiClient.isAuthenticated()}
+          onSidebarToggle={() => setIsSidebarOpen(!isSidebarOpen)}
         />
         
         <div className="content-area">
@@ -308,15 +270,16 @@ function Dashboard() {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <AuthWrapper>
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/task-maker" element={<TaskMakerPage />} />
-          </Routes>
-        </AuthWrapper>
-      </Router>
+              <Router>
+          <AuthWrapper>
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/tasks" element={<TasksPage />} />
+              <Route path="/task-editor/:taskId" element={<TaskEditor />} />
+            </Routes>
+          </AuthWrapper>
+        </Router>
     </AuthProvider>
   );
 }

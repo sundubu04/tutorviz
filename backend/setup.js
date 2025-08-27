@@ -1,22 +1,29 @@
-const { initializeDatabase } = require('./src/config/database');
+const { initializeDatabase, insertSampleData } = require('./src/config/database');
 const bcrypt = require('bcryptjs');
 
 const setupDatabase = async () => {
   try {
     console.log('🚀 Setting up TutoriAI Database...');
     
-    // Initialize database tables and sample data
+    // Initialize database tables
     await initializeDatabase();
+    
+    // Insert sample data
+    await insertSampleData();
     
     console.log('✅ Database setup completed successfully!');
     console.log('\n📋 Database Status:');
     console.log('- Database tables created successfully');
-    console.log('- No sample data inserted (clean slate)');
+    console.log('- Sample data inserted successfully');
     console.log('- Ready for user registration and class creation');
     
     console.log('\n🔗 API Endpoints:');
     console.log('- Health Check: http://localhost:5001/api/health');
     console.log('- API Base: http://localhost:5001/api');
+    
+    console.log('\n👥 Sample Users:');
+    console.log('- Teacher: teacher@tutoriai.com (password: password123)');
+    console.log('- Student: student@tutoriai.com (password: password123)');
     
     console.log('\n🎯 Next Steps:');
     console.log('1. Start the server: npm run dev');

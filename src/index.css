@@ -43,3 +43,29 @@ code {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Panel resizing styles */
+.panel-resizer {
+  transition: background-color 0.2s ease;
+}
+
+.panel-resizer:hover {
+  background-color: #3b82f6 !important;
+}
+
+.panel-resizer:active {
+  background-color: #1d4ed8 !important;
+}
+
+/* Prevent text selection during resize */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Smooth transitions for panels */
+.panel-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}

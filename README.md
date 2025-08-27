@@ -7,13 +7,9 @@ A comprehensive web-based classroom management system designed to streamline edu
 ### Core Functionalities
 - **Student Manager**: Centralized student information and progress tracking
 - **Calendar System**: Comprehensive scheduling and event management
-- **Task Maker**: Comprehensive assignment and task creation system
 - **User Authentication**: JWT-based authentication with role-based access control
 
-### User Roles
-- **Teachers**: Full access to all features, can create/manage classes and assignments
-- **Students**: View assigned tasks, submit assignments, access enrolled classes
-- **Administrators**: User management and system configuration
+
 
 ## 🛠 Tech Stack
 
