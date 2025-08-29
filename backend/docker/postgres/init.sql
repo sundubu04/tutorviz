@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'student',
+    avatar_url VARCHAR(500),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -24,6 +25,8 @@ CREATE TABLE IF NOT EXISTS classes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     description TEXT,
+    icon_name VARCHAR(100) DEFAULT 'book',
+    icon_color VARCHAR(7) DEFAULT '#3B82F6',
     teacher_id UUID REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -45,6 +48,9 @@ CREATE TABLE IF NOT EXISTS assignments (
     description TEXT,
     class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
     due_date TIMESTAMP,
+    priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
+    topic VARCHAR(255),
+    created_by UUID REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -68,6 +74,8 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     description TEXT,
     start_time TIMESTAMP NOT NULL,
     end_time TIMESTAMP NOT NULL,
+    event_type VARCHAR(50) DEFAULT 'general',
+    is_all_day BOOLEAN DEFAULT false,
     class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
     created_by UUID REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -95,8 +103,10 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_classes_teacher_id ON classes(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_class_id ON assignments(class_id);
+CREATE INDEX IF NOT EXISTS idx_assignments_created_by ON assignments(created_by);
 CREATE INDEX IF NOT EXISTS idx_calendar_events_class_id ON calendar_events(class_id);
 CREATE INDEX IF NOT EXISTS idx_calendar_events_start_time ON calendar_events(start_time);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_event_type ON calendar_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_tasks_class_id ON tasks(class_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON tasks(created_by);
 CREATE INDEX IF NOT EXISTS idx_tasks_task_type ON tasks(task_type);
@@ -135,12 +145,12 @@ BEGIN
             VALUES (class_id, student_id);
             
             -- Insert sample assignment
-            INSERT INTO assignments (title, description, class_id, due_date)
-            VALUES ('First Programming Assignment', 'Create a simple Hello World program', class_id, NOW() + INTERVAL '7 days');
+            INSERT INTO assignments (title, description, class_id, due_date, priority, topic)
+            VALUES ('First Programming Assignment', 'Create a simple Hello World program', class_id, NOW() + INTERVAL '7 days', 'normal', 'Programming Basics');
             
             -- Insert sample calendar event
-            INSERT INTO calendar_events (title, description, start_time, end_time, class_id, created_by)
-            VALUES ('Class Introduction', 'First day of class introduction', NOW(), NOW() + INTERVAL '1 hour', class_id, teacher_id);
+            INSERT INTO calendar_events (title, description, start_time, end_time, event_type, class_id, created_by)
+            VALUES ('Class Introduction', 'First day of class introduction', NOW(), NOW() + INTERVAL '1 hour', 'class', class_id, teacher_id);
             
             -- Insert sample task
             INSERT INTO tasks (title, description, content, task_type, difficulty_level, estimated_time, class_id, created_by, tags)

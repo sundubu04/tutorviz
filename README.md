@@ -1,351 +1,191 @@
-# TutoriAI - Classroom Management System
+# TutoriAI
 
-A comprehensive web-based classroom management system designed to streamline educational workflows for teachers and enhance learning experiences for students. The application provides an integrated platform for managing students, scheduling, collaborative whiteboarding, and task creation/management.
+A comprehensive classroom management system with AI-powered features.
 
-## 🚀 Features
+## 🚀 Quick Start with Docker
 
-### Core Functionalities
-- **Student Manager**: Centralized student information and progress tracking
-- **Calendar System**: Comprehensive scheduling and event management
-- **User Authentication**: JWT-based authentication with role-based access control
+The easiest way to run TutoriAI is using Docker Compose, which will set up all services (frontend, backend, and database) automatically.
 
+### Prerequisites
 
+- [Docker](https://docs.docker.com/get-docker/) (version 20.10 or higher)
+- [Docker Compose](https://docs.docker.com/compose/install/) (version 2.0 or higher)
 
-## 🛠 Tech Stack
-
-### Frontend
-- **Framework**: React.js with TypeScript
-- **Styling**: Tailwind CSS
-- **Icons**: Lucide React
-- **State Management**: React Hooks
-
-### Backend
-- **Runtime**: Node.js
-- **Framework**: Express.js
-- **Database**: PostgreSQL (Docker containerized)
-- **Authentication**: JWT (jsonwebtoken)
-- **Password Hashing**: bcryptjs
-- **Validation**: express-validator
-- **Security**: helmet, express-rate-limit
-- **Containerization**: Docker & Docker Compose
-
-## 📋 Prerequisites
-
-- **Node.js** (v14 or higher)
-- **Docker** and **Docker Compose**
-- **npm** or **yarn**
-
-## 🚀 Quick Start
-
-### 1. Clone the Repository
-```bash
-git clone <repository-url>
-cd TutoriAI
-```
-
-### 2. One-Time Setup (Automatic)
-```bash
-# Run the setup script (handles everything automatically)
-./setup.sh
-```
-
-This script will:
-- ✅ Check Docker and Docker Compose availability
-- ✅ Start PostgreSQL database container
-- ✅ Create the database (`tutoriai_db`)
-- ✅ Set up environment configuration
-- ✅ Install all dependencies
-- ✅ Initialize database tables
-- ✅ Provide clear next steps
-
-### 3. Start the Application
-```bash
-# Start both backend and frontend servers
-./start.sh
-```
-
-This script will:
-- ✅ Start the backend server (port 5001)
-- ✅ Start the frontend server (port 3000)
-- ✅ Show you the URLs and credentials
-- ✅ Handle graceful shutdown with Ctrl+C
-
-### 4. Access the Application
-
-The application will be available at:
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:5001
-
-## 🐳 Docker-Based Backend Setup
-
-### Quick Docker Setup
-```bash
-# Start PostgreSQL database
-docker-compose up -d postgres
-
-# Wait for database to be ready (5-10 seconds)
-sleep 5
-
-# Set up backend environment
-cd backend
-cp env.example .env
-
-# Install dependencies
-npm install
-
-# Initialize database
-npm run setup
-
-# Start backend server
-npm run dev
-```
-
-### Docker Services
-
-The project includes Docker Compose configuration for easy database setup:
-
-```yaml
-# docker-compose.yml
-services:
-  postgres:
-    image: postgres:14
-    container_name: tutoriai-postgres
-    environment:
-      POSTGRES_DB: tutoriai_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: your_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-```
-
-### 5. Manual Setup (Alternative)
-
-If you prefer manual setup or need to troubleshoot:
-
-#### Backend Setup with Docker
-```bash
-# Navigate to project root
-cd TutoriAI
-
-# Start PostgreSQL database
-docker-compose up -d postgres
-
-# Wait for database to be ready
-sleep 5
-
-# Navigate to backend directory
-cd backend
-
-# Install dependencies
-npm install
-
-# Set up environment variables
-cp env.example .env
-```
-
-Edit the `.env` file with your configuration:
-```env
-PORT=5001
-NODE_ENV=development
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=tutoriai_db
-DB_USER=postgres
-DB_PASSWORD=your_password
-JWT_SECRET=your_jwt_secret_key_here
-JWT_EXPIRES_IN=24h
-CORS_ORIGIN=http://localhost:3000
-UPLOAD_PATH=./uploads
-MAX_FILE_SIZE=10485760
-```
+### Development Mode (Recommended for development)
 
 ```bash
-# Initialize database and sample data
-npm run setup
+# Start all services in development mode
+./docker.sh start dev
 
-# Start the backend server
-npm run dev
-```
-
-#### Frontend Setup
-```bash
-# Navigate to project root
-cd ..
-
-# Install dependencies
-npm install
-
-# Start the frontend development server
-npm start
-```
-
-## 🗄 Database Management
-
-### Docker Database Commands
-```bash
-# Start database
-docker-compose up -d postgres
-
-# Stop database
-docker-compose stop postgres
-
-# View database logs
-docker-compose logs postgres
-
-# Reset database (removes all data)
-docker-compose down -v
-docker-compose up -d postgres
-```
-
-### Database Reset
-```bash
-# Reset database and recreate tables
-cd backend
-npm run reset
-```
-
-## 🛠 Available Scripts
-
-### Setup Scripts
-- **`./setup.sh`** - Complete one-time setup (Docker database, dependencies, configuration)
-- **`./start.sh`** - Start both backend and frontend servers
-
-### Backend Scripts
-- **`npm run dev`** - Start backend development server
-- **`npm run setup`** - Initialize database and sample data
-- **`npm run reset`** - Reset database and recreate tables
-- **`npm test`** - Run backend tests
-- **`npm run test:all`** - Run all backend tests
-
-### Docker Scripts
-- **`docker-compose up -d postgres`** - Start PostgreSQL database
-- **`docker-compose stop postgres`** - Stop PostgreSQL database
-- **`docker-compose logs postgres`** - View database logs
-
-## 🔧 Development
-
-### Quick Development Start
-```bash
-# Start database and both servers for development
-docker-compose up -d postgres
-./start.sh
-```
-
-### Backend Development
-
-```bash
-cd backend
-
-# Start development server with auto-reload
-npm run dev
-
-# Run database migrations
-npm run migrate
-
-# Test API endpoints
-npm run test:api
-
-# Run tests
-npm test
-```
-
-### Frontend Development
-
-```bash
-# Start development server
-npm start
-
-# Build for production
-npm run build
-
-# Run tests
-npm test
-```
-
-## 📚 API Documentation
-
-**Base URL**: `http://localhost:5001/api`
-
-### Authentication Endpoints
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - User login
-- `GET /api/auth/profile` - Get current user profile
-- `PUT /api/auth/profile` - Update user profile
-
-### Class Management
-- `GET /api/classes` - Get all classes for current user
-- `POST /api/classes` - Create new class (teachers)
-- `PUT /api/classes/:id` - Update class
-- `DELETE /api/classes/:id` - Delete class
-
-### Assignment System
-- `GET /api/assignments` - Get all assignments
-- `POST /api/assignments` - Create new assignment (teachers)
-- `POST /api/assignments/:id/submit` - Submit assignment (students)
-- `PUT /api/assignments/:id/grade/:submissionId` - Grade assignment (teachers)
-
-### Calendar & Events
-- `GET /api/calendar` - Get calendar events
-- `POST /api/calendar` - Create new event
-- `PUT /api/calendar/:id` - Update event
-
-## 🗄 Database Schema
-
-The application uses PostgreSQL (containerized) with the following main tables:
-
-- **users**: User accounts and profiles
-- **classes**: Class information and enrollments
-- **assignments**: Task definitions and submissions
-- **calendar_events**: Events and scheduling data
-
-## 🔒 Security Features
-
-- JWT token authentication
-- Password hashing with bcrypt
-- Input validation and sanitization
-- Rate limiting
-- Security headers with helmet
-- CORS configuration
-- SQL injection prevention
-
-## 🧪 Testing
-
-### Backend Tests
-```bash
-cd backend
-npm test
-npm run test:api
-```
-
-### Frontend Tests
-```bash
-npm test
-```
-
-## 📦 Deployment
-
-### Backend Deployment
-1. Set up PostgreSQL database (or use Docker)
-2. Configure environment variables
-3. Run database migrations
-4. Start the server with `npm start`
-
-### Frontend Deployment
-1. Build the application: `npm run build`
-2. Deploy the `build` folder to your web server
-
-## 🐳 Docker Production
-
-For production deployment, you can use the provided Docker configurations:
-
-```bash
-# Production database
-docker-compose -f docker-compose.prod.yml up -d
-
-# Development environment
+# Or manually with docker-compose
 docker-compose -f docker-compose.dev.yml up -d
+```
+
+**Services will be available at:**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:5001
+- PostgreSQL: localhost:5432
+
+### Production Mode
+
+```bash
+# Start all services in production mode
+./docker.sh start prod
+
+# Or manually with docker-compose
+docker-compose up -d
+```
+
+### Docker Management Commands
+
+```bash
+# View all available commands
+./docker.sh help
+
+# Start services
+./docker.sh start [dev|prod]
+
+# Stop services
+./docker.sh stop [dev|prod]
+
+# Restart services
+./docker.sh restart [dev|prod]
+
+# View logs
+./docker.sh logs [dev|prod] [service_name]
+
+# Build services
+./docker.sh build [dev|prod]
+
+# Check service status
+./docker.sh status [dev|prod]
+
+# Clean up all Docker resources
+./docker.sh cleanup
+```
+
+### Development Features
+
+- **Hot Reloading**: Frontend and backend automatically reload when you make changes
+- **Volume Mounting**: Your local code is mounted into containers for live development
+- **Database Persistence**: PostgreSQL data is preserved between container restarts
+- **Environment Separation**: Separate configurations for development and production
+
+## 🛠️ Manual Setup (Alternative)
+
+If you prefer not to use Docker, you can set up the services manually:
+
+### Backend Setup
+
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+### Frontend Setup
+
+```bash
+npm install
+npm start
+```
+
+### Database Setup
+
+1. Install PostgreSQL
+2. Create a database named `tutoriai`
+3. Run the initialization scripts in `backend/docker/postgres/`
+
+## 📁 Project Structure
+
+```
+TutoriAI/
+├── frontend/                 # React TypeScript application
+├── backend/                  # Node.js Express API
+├── docker/                   # Docker configurations
+│   ├── postgres/            # Database initialization scripts
+│   └── Dockerfile           # Backend container
+├── docker-compose.yml        # Production Docker setup
+├── docker-compose.dev.yml    # Development Docker setup
+├── Dockerfile               # Frontend container
+├── nginx.conf               # Nginx configuration
+├── docker.sh                # Docker management script
+└── README.md                # This file
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+The following environment variables can be configured:
+
+**Backend:**
+- `NODE_ENV`: Environment (development/production)
+- `PORT`: Server port (default: 5001)
+- `DATABASE_URL`: PostgreSQL connection string
+- `JWT_SECRET`: Secret key for JWT tokens
+- `CORS_ORIGIN`: Allowed CORS origin
+
+**Frontend:**
+- `REACT_APP_API_URL`: Backend API URL
+
+### Database
+
+The PostgreSQL database is automatically initialized with:
+- User tables and authentication
+- Class management system
+- Assignment tracking
+- Calendar events
+- Task management
+
+## 🚀 Deployment
+
+### Production Deployment
+
+1. Build the production images:
+   ```bash
+   ./docker.sh build prod
+   ```
+
+2. Start production services:
+   ```bash
+   ./docker.sh start prod
+   ```
+
+3. Configure your reverse proxy (nginx, Apache) to point to the frontend container
+
+### Environment-Specific Configurations
+
+- **Development**: Uses volume mounts for live code editing and hot reloading
+- **Production**: Uses optimized builds and production-ready configurations
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Port conflicts**: Ensure ports 3000, 5001, and 5432 are available
+2. **Permission errors**: Make sure Docker has proper permissions
+3. **Database connection**: Wait for PostgreSQL to be healthy before starting backend
+
+### Logs and Debugging
+
+```bash
+# View all service logs
+./docker.sh logs dev
+
+# View specific service logs
+./docker.sh logs dev backend
+
+# Check service status
+./docker.sh status dev
+```
+
+### Reset Everything
+
+```bash
+# Clean up all Docker resources and start fresh
+./docker.sh cleanup
+./docker.sh start dev
 ```
 
 ## 🤝 Contributing
@@ -353,24 +193,13 @@ docker-compose -f docker-compose.dev.yml up -d
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests if applicable
+4. Test with Docker: `./docker.sh start dev`
 5. Submit a pull request
 
 ## 📄 License
 
-MIT License
+This project is licensed under the MIT License.
 
-## 🆘 Support
+---
 
-For support and questions:
-- Check the documentation in the `backend/README.md` and `PROJECT_SPECIFICATION.md`
-- Review the API documentation
-- Test the sample endpoints with the provided credentials
-
-## 🎯 Roadmap
-
-- [ ] Mobile application
-- [ ] Advanced analytics and reporting
-- [ ] Third-party LMS integration
-- [ ] AI-powered grading assistance
-- [ ] Parent portal integration
+For more detailed information about specific features, see the `docs/` directory.

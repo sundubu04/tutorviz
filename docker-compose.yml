@@ -1,24 +1,65 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database
   postgres:
-    image: postgres:14
+    image: postgres:14-alpine
     container_name: tutoriai-postgres
     environment:
-      POSTGRES_DB: tutoriai_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: your_password
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: tutoriai
+      POSTGRES_USER: tutoriai_user
+      POSTGRES_PASSWORD: tutoriai_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-    restart: unless-stopped
+      - ./backend/docker/postgres/init-security.sql:/docker-entrypoint-initdb.d/init-security.sql
+    ports:
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d tutoriai_db"]
+      test: ["CMD-SHELL", "pg_isready -U tutoriai_user -d tutoriai"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tutoriai-backend
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      DATABASE_URL: postgresql://tutoriai_user:tutoriai_password@postgres:5432/tutoriai
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - "5001:5001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/uploads:/app/uploads
+    restart: unless-stopped
+
+  # Frontend React App
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tutoriai-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
 
 volumes:
-  postgres_data: 
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: tutoriai-network 
