@@ -2,16 +2,32 @@ const { Pool } = require('pg');
 require('dotenv').config();
 
 // Database connection configuration
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'tutoriai_db',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'your_password',
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+// Support both DATABASE_URL (Docker) and individual DB_* variables (local)
+let poolConfig;
+
+if (process.env.DATABASE_URL) {
+  // Use DATABASE_URL for Docker deployment
+  poolConfig = {
+    connectionString: process.env.DATABASE_URL,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  };
+} else {
+  // Use individual DB_* variables for local development
+  poolConfig = {
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    database: process.env.DB_NAME || 'tutoriai_db',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || 'your_password',
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  };
+}
+
+const pool = new Pool(poolConfig);
 
 // Test database connection
 const testConnection = async () => {

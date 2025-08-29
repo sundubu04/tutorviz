@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
     last_name VARCHAR(100) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'student',
     avatar_url VARCHAR(500),
+    is_active BOOLEAN DEFAULT true,
+    last_login TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -101,6 +103,8 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
+CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login);
 CREATE INDEX IF NOT EXISTS idx_classes_teacher_id ON classes(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_class_id ON assignments(class_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_created_by ON assignments(created_by);
@@ -113,18 +117,43 @@ CREATE INDEX IF NOT EXISTS idx_tasks_task_type ON tasks(task_type);
 CREATE INDEX IF NOT EXISTS idx_tasks_difficulty_level ON tasks(difficulty_level);
 CREATE INDEX IF NOT EXISTS idx_tasks_tags ON tasks USING GIN(tags);
 
+-- Create trigger function to automatically update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Create triggers for tables with updated_at columns
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_classes_updated_at BEFORE UPDATE ON classes
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_assignments_updated_at BEFORE UPDATE ON assignments
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_calendar_events_updated_at BEFORE UPDATE ON calendar_events
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_tasks_updated_at BEFORE UPDATE ON tasks
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Insert sample data if tables are empty
 DO $$
 BEGIN
     -- Only insert sample data if no users exist
     IF NOT EXISTS (SELECT 1 FROM users LIMIT 1) THEN
         -- Insert sample teacher
-        INSERT INTO users (email, password_hash, first_name, last_name, role)
-        VALUES ('teacher@tutoriai.com', '$2a$10$rQZ9K8mN2pL1qR3sT5uV7w', 'John', 'Doe', 'teacher');
+        INSERT INTO users (email, password_hash, first_name, last_name, role, is_active)
+        VALUES ('teacher@tutoriai.com', '$2a$10$rQZ9K8mN2pL1qR3sT5uV7w', 'John', 'Doe', 'teacher', true);
         
         -- Insert sample student
-        INSERT INTO users (email, password_hash, first_name, last_name, role)
-        VALUES ('student@tutoriai.com', '$2a$10$rQZ9K8mN2pL1qR3sT5uV7w', 'Jane', 'Smith', 'student');
+        INSERT INTO users (email, password_hash, first_name, last_name, role, is_active)
+        VALUES ('student@tutoriai.com', '$2a$10$rQZ9K8mN2pL1qR3sT5uV7w', 'Jane', 'Smith', 'student', true);
         
         -- Get the teacher ID
         DECLARE

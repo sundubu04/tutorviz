@@ -11,70 +11,133 @@ const createErrorResponse = (statusCode, error, message) => {
   };
 };
 
-// Verify JWT token
+// Enhanced token extraction with multiple fallback methods
+const extractToken = (req) => {
+  // Method 1: Authorization header (Bearer token)
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  
+  // Method 2: x-access-token header
+  if (req.headers['x-access-token']) {
+    return req.headers['x-access-token'];
+  }
+  
+  // Method 3: Query parameter (for certain use cases)
+  if (req.query.token) {
+    return req.query.token;
+  }
+  
+  // Method 4: Cookie (if using cookie-based auth)
+  if (req.cookies && req.cookies.accessToken) {
+    return req.cookies.accessToken;
+  }
+  
+  return null;
+};
+
+// Enhanced JWT token validation
+const validateToken = (token) => {
+  if (!token || typeof token !== 'string') {
+    return { valid: false, error: 'Token must be a non-empty string' };
+  }
+  
+  // Check token format (basic validation)
+  if (!/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/.test(token)) {
+    return { valid: false, error: 'Token has invalid format' };
+  }
+  
+  return { valid: true };
+};
+
+// Verify JWT token with enhanced security
 const authenticateToken = async (req, res, next) => {
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    const token = extractToken(req);
 
     if (!token) {
-      return res.status(401).json({ 
-        error: 'Access token required',
-        message: 'Please provide a valid authentication token in the Authorization header'
-      });
+      return res.status(401).json(createErrorResponse(401, 'Access token required', 
+        'Please provide a valid authentication token in the Authorization header, x-access-token header, or as a query parameter'));
+    }
+
+    // Validate token format before verification
+    const tokenValidation = validateToken(token);
+    if (!tokenValidation.valid) {
+      return res.status(401).json(createErrorResponse(401, 'Invalid token format', tokenValidation.error));
     }
 
     if (!process.env.JWT_SECRET) {
       console.error('JWT_SECRET is not configured');
-      return res.status(500).json({ 
-        error: 'Server configuration error',
-        message: 'Authentication is not properly configured'
-      });
+      return res.status(500).json(createErrorResponse(500, 'Server configuration error', 
+        'Authentication is not properly configured'));
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Verify JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+      algorithms: ['HS256'] // Only allow secure algorithms
+    });
     
-    if (!decoded.userId) {
-      return res.status(401).json({ 
-        error: 'Invalid token structure',
-        message: 'The provided token has an invalid structure'
-      });
+    if (!decoded.userId || !decoded.iat || !decoded.exp) {
+      return res.status(401).json(createErrorResponse(401, 'Invalid token structure', 
+        'The provided token has an invalid structure'));
     }
     
-    // Get user from database to ensure they still exist
+    // Check if token was issued before a certain date (for token revocation)
+    const tokenIssuedAt = new Date(decoded.iat * 1000);
+    const minimumIssueDate = new Date('2024-01-01'); // Adjust as needed
+    if (tokenIssuedAt < minimumIssueDate) {
+      return res.status(401).json(createErrorResponse(401, 'Token revoked', 
+        'This token has been revoked. Please log in again'));
+    }
+    
+    // Enhanced user lookup with additional security checks
     const userResult = await pool.query(
-      'SELECT id, email, first_name, last_name, role FROM users WHERE id = $1',
+      `SELECT id, email, first_name, last_name, role, created_at, updated_at
+       FROM users 
+       WHERE id = $1`,
       [decoded.userId]
     );
 
     if (userResult.rows.length === 0) {
-      return res.status(401).json({ 
-        error: 'Invalid token',
-        message: 'User not found or account has been deleted'
-      });
+      return res.status(401).json(createErrorResponse(401, 'Invalid token', 
+        'User not found, account has been deleted, or account is inactive'));
     }
 
-    req.user = userResult.rows[0];
+    const user = userResult.rows[0];
+    
+    // Add user info to request with additional metadata
+    req.user = {
+      id: user.id,
+      email: user.email,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      role: user.role,
+      createdAt: user.created_at,
+      updatedAt: user.updated_at,
+      tokenIssuedAt: tokenIssuedAt,
+      tokenExpiresAt: new Date(decoded.exp * 1000),
+      sessionId: decoded.sessionId || null
+    };
+    
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ 
-        error: 'Invalid token',
-        message: 'The provided token is invalid or malformed'
-      });
+      return res.status(401).json(createErrorResponse(401, 'Invalid token', 
+        'The provided token is invalid or malformed'));
     }
     if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
-        error: 'Token expired',
-        message: 'The provided token has expired. Please log in again'
-      });
+      return res.status(401).json(createErrorResponse(401, 'Token expired', 
+        'The provided token has expired. Please log in again'));
+    }
+    if (error.name === 'NotBeforeError') {
+      return res.status(401).json(createErrorResponse(401, 'Token not active', 
+        'The provided token is not yet active'));
     }
     
     console.error('Auth middleware error:', error);
-    res.status(500).json({ 
-      error: 'Authentication error',
-      message: 'An error occurred during authentication. Please try again'
-    });
+    res.status(500).json(createErrorResponse(500, 'Authentication error', 
+      'An error occurred during authentication. Please try again'));
   }
 };
 
@@ -82,17 +145,13 @@ const authenticateToken = async (req, res, next) => {
 const requireRole = (roles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ 
-        error: 'Authentication required',
-        message: 'Please authenticate first'
-      });
+      return res.status(401).json(createErrorResponse(401, 'Authentication required', 
+        'Please authenticate first'));
     }
 
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        error: 'Insufficient permissions',
-        message: `Access denied. Required roles: ${roles.join(', ')}`
-      });
+      return res.status(403).json(createErrorResponse(403, 'Insufficient permissions', 
+        `Access denied. Required roles: ${roles.join(', ')}`));
     }
 
     next();
@@ -104,10 +163,8 @@ const requireOwnership = (resourceTable, resourceIdField = 'id', ownerField = 'c
   return async (req, res, next) => {
     try {
       if (!req.user) {
-        return res.status(401).json({ 
-          error: 'Authentication required',
-          message: 'Please authenticate first'
-        });
+        return res.status(401).json(createErrorResponse(401, 'Authentication required', 
+          'Please authenticate first'));
       }
 
       // Admins can access everything
@@ -117,10 +174,8 @@ const requireOwnership = (resourceTable, resourceIdField = 'id', ownerField = 'c
 
       const resourceId = req.params[resourceIdField];
       if (!resourceId) {
-        return res.status(400).json({ 
-          error: 'Resource ID required',
-          message: 'Resource ID is missing from request'
-        });
+        return res.status(400).json(createErrorResponse(400, 'Resource ID required', 
+          'Resource ID is missing from request'));
       }
 
       // Check if user owns the resource
@@ -130,26 +185,20 @@ const requireOwnership = (resourceTable, resourceIdField = 'id', ownerField = 'c
       );
 
       if (result.rows.length === 0) {
-        return res.status(404).json({ 
-          error: 'Resource not found',
-          message: 'The requested resource does not exist'
-        });
+        return res.status(404).json(createErrorResponse(404, 'Resource not found', 
+          'The requested resource does not exist'));
       }
 
       if (result.rows[0][ownerField] !== req.user.id) {
-        return res.status(403).json({ 
-          error: 'Access denied',
-          message: 'You do not have permission to access this resource'
-        });
+        return res.status(403).json(createErrorResponse(403, 'Access denied', 
+          'You do not have permission to access this resource'));
       }
 
       next();
     } catch (error) {
       console.error('Ownership check error:', error);
-      res.status(500).json({ 
-        error: 'Authorization error',
-        message: 'An error occurred during authorization'
-      });
+      res.status(500).json(createErrorResponse(500, 'Authorization error', 
+        'An error occurred during authorization'));
     }
   };
 };
@@ -159,18 +208,14 @@ const requireClassEnrollment = () => {
   return async (req, res, next) => {
     try {
       if (!req.user) {
-        return res.status(401).json({ 
-          error: 'Authentication required',
-          message: 'Please authenticate first'
-        });
+        return res.status(401).json(createErrorResponse(401, 'Authentication required', 
+          'Please authenticate first'));
       }
 
       const classId = req.params.classId || req.body.class_id;
       if (!classId) {
-        return res.status(400).json({ 
-          error: 'Class ID required',
-          message: 'Class ID is missing from request'
-        });
+        return res.status(400).json(createErrorResponse(400, 'Class ID required', 
+          'Class ID is missing from request'));
       }
 
       // Teachers and admins can access any class
@@ -185,19 +230,15 @@ const requireClassEnrollment = () => {
       );
 
       if (result.rows.length === 0) {
-        return res.status(403).json({ 
-          error: 'Not enrolled',
-          message: 'You are not enrolled in this class'
-        });
+        return res.status(403).json(createErrorResponse(403, 'Not enrolled', 
+          'You are not enrolled in this class'));
       }
 
       next();
     } catch (error) {
       console.error('Class enrollment check error:', error);
-      res.status(500).json({ 
-        error: 'Authorization error',
-        message: 'An error occurred during authorization'
-      });
+      res.status(500).json(createErrorResponse(500, 'Authorization error', 
+        'An error occurred during authorization'));
     }
   };
 };
@@ -210,46 +251,66 @@ const handleDatabaseErrors = (error, req, res, next) => {
   switch (error.code) {
     case '23505': // Unique violation
       if (error.constraint === 'unique_class_name_per_teacher') {
-        return res.status(409).json({
-          error: 'Duplicate resource',
-          message: 'A class with this name already exists for this teacher'
-        });
+        return res.status(409).json(createErrorResponse(409, 'Duplicate resource', 
+          'A class with this name already exists for this teacher'));
       }
       if (error.constraint === 'unique_class_name_per_teacher') {
-        return res.status(409).json({
-          error: 'Duplicate resource',
-          message: 'This resource already exists'
-        });
+        return res.status(409).json(createErrorResponse(409, 'Duplicate resource', 
+          'This resource already exists'));
       }
-      return res.status(409).json({
-        error: 'Duplicate resource',
-        message: 'A resource with these details already exists'
-      });
+      return res.status(409).json(createErrorResponse(409, 'Duplicate resource', 
+        'A resource with these details already exists'));
       
     case '23503': // Foreign key violation
-      return res.status(400).json({
-        error: 'Invalid reference',
-        message: 'The referenced resource does not exist'
-      });
+      return res.status(400).json(createErrorResponse(400, 'Invalid reference', 
+        'The referenced resource does not exist'));
       
     case '23502': // Not null violation
-      return res.status(400).json({
-        error: 'Missing required field',
-        message: 'A required field is missing'
-      });
+      return res.status(400).json(createErrorResponse(400, 'Missing required field', 
+        'A required field is missing'));
       
     case '23514': // Check violation
-      return res.status(400).json({
-        error: 'Invalid data',
-        message: 'The provided data does not meet the requirements'
-      });
+      return res.status(400).json(createErrorResponse(400, 'Invalid data', 
+        'The provided data does not meet the requirements'));
       
     default:
-      return res.status(500).json({
-        error: 'Database error',
-        message: 'An error occurred while processing your request'
-      });
+      return res.status(500).json(createErrorResponse(500, 'Database error', 
+        'An error occurred while processing your request'));
   }
+};
+
+// Utility function to check if token needs refresh
+const shouldRefreshToken = (req) => {
+  if (!req.user || !req.user.tokenExpiresAt) {
+    return false;
+  }
+  
+  const now = new Date();
+  const expiresAt = new Date(req.user.tokenExpiresAt);
+  const timeUntilExpiry = expiresAt.getTime() - now.getTime();
+  const fiveMinutes = 5 * 60 * 1000; // 5 minutes in milliseconds
+  
+  return timeUntilExpiry < fiveMinutes;
+};
+
+// Utility function to generate new token
+const generateNewToken = (user) => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not configured');
+  }
+  
+  const payload = {
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    sessionId: Math.random().toString(36).substring(2, 15), // Generate unique session ID
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
+  };
+  
+  return jwt.sign(payload, process.env.JWT_SECRET, {
+    algorithm: 'HS256'
+  });
 };
 
 module.exports = {
@@ -258,5 +319,9 @@ module.exports = {
   requireOwnership,
   requireClassEnrollment,
   handleDatabaseErrors,
-  createErrorResponse
+  createErrorResponse,
+  extractToken,
+  validateToken,
+  shouldRefreshToken,
+  generateNewToken
 }; 

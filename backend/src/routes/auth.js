@@ -152,7 +152,7 @@ router.post('/login', [
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, email, first_name, last_name, role, avatar_url, created_at, updated_at
+      `SELECT id, email, first_name, last_name, role, created_at, updated_at
        FROM users WHERE id = $1`,
       [req.user.id]
     );
@@ -172,7 +172,6 @@ router.get('/profile', authenticateToken, async (req, res) => {
         firstName: user.first_name,
         lastName: user.last_name,
         role: user.role,
-        avatarUrl: user.avatar_url,
         createdAt: user.created_at,
         updatedAt: user.updated_at
       }
@@ -189,8 +188,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
 // Update user profile
 router.put('/profile', authenticateToken, [
   body('firstName').optional().trim().isLength({ min: 1 }),
-  body('lastName').optional().trim().isLength({ min: 1 }),
-  body('avatarUrl').optional().isURL()
+  body('lastName').optional().trim().isLength({ min: 1 })
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -201,7 +199,7 @@ router.put('/profile', authenticateToken, [
       });
     }
 
-    const { firstName, lastName, avatarUrl } = req.body;
+    const { firstName, lastName } = req.body;
     const updateFields = [];
     const updateValues = [];
     let paramCount = 1;
@@ -216,10 +214,6 @@ router.put('/profile', authenticateToken, [
       updateValues.push(lastName);
     }
 
-    if (avatarUrl) {
-      updateFields.push(`avatar_url = $${paramCount++}`);
-      updateValues.push(avatarUrl);
-    }
 
     if (updateFields.length === 0) {
       return res.status(400).json({ 
@@ -233,7 +227,7 @@ router.put('/profile', authenticateToken, [
 
     const result = await pool.query(
       `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${paramCount}
-       RETURNING id, email, first_name, last_name, role, avatar_url, updated_at`,
+       RETURNING id, email, first_name, last_name, role, updated_at`,
       updateValues
     );
 
@@ -246,7 +240,6 @@ router.put('/profile', authenticateToken, [
         firstName: user.first_name,
         lastName: user.last_name,
         role: user.role,
-        avatarUrl: user.avatar_url,
         updatedAt: user.updated_at
       }
     });
