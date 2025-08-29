@@ -1,0 +1,172 @@
+// TutoriAI Prisma Schema
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  student
+  teacher
+  admin
+}
+
+enum AssignmentPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum EventType {
+  class
+  assignment
+  exam
+  meeting
+  other
+}
+
+enum TaskDifficultyLevel {
+  beginner
+  easy
+  medium
+  hard
+  expert
+}
+
+model User {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  firstName    String   @map("first_name") @db.VarChar(100)
+  lastName     String   @map("last_name") @db.VarChar(100)
+  role         UserRole @default(student)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  teachingClasses    Class[]             @relation("TeacherClasses")
+  enrollments        ClassEnrollment[]
+  createdAssignments Assignment[]        @relation("AssignmentCreator")
+  submissions        AssignmentSubmission[]
+  createdEvents      CalendarEvent[]     @relation("EventCreator")
+  createdTasks       Task[]              @relation("TaskCreator")
+
+  @@map("users")
+}
+
+model Class {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @db.VarChar(255)
+  description String?
+  iconName    String?  @default("book") @map("icon_name") @db.VarChar(100)
+  iconColor   String?  @default("#3B82F6") @map("icon_color") @db.VarChar(7)
+  teacherId   String   @map("teacher_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  teacher     User              @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Cascade)
+  enrollments ClassEnrollment[]
+  assignments Assignment[]
+  events      CalendarEvent[]
+  tasks       Task[]
+
+  @@map("classes")
+}
+
+model ClassEnrollment {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  classId    String   @map("class_id") @db.Uuid
+  studentId  String   @map("student_id") @db.Uuid
+  enrolledAt DateTime @default(now()) @map("enrolled_at")
+
+  // Relations
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student User  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, studentId])
+  @@map("class_enrollments")
+}
+
+model Assignment {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String             @db.VarChar(255)
+  description String?
+  classId     String             @map("class_id") @db.Uuid
+  dueDate     DateTime?          @map("due_date")
+  priority    AssignmentPriority @default(normal)
+  topic       String?            @db.VarChar(255)
+  createdBy   String             @map("created_by") @db.Uuid
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  class       Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  creator     User                   @relation("AssignmentCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  submissions AssignmentSubmission[]
+
+  @@map("assignments")
+}
+
+model AssignmentSubmission {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assignmentId String    @map("assignment_id") @db.Uuid
+  studentId    String    @map("student_id") @db.Uuid
+  content      String?
+  filePath     String?   @map("file_path") @db.VarChar(500)
+  submittedAt  DateTime  @default(now()) @map("submitted_at")
+  grade        Decimal?  @db.Decimal(5, 2)
+  feedback     String?
+
+  // Relations
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("assignment_submissions")
+}
+
+model CalendarEvent {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String    @db.VarChar(255)
+  description String?
+  startTime   DateTime  @map("start_time")
+  endTime     DateTime  @map("end_time")
+  eventType   EventType @default(other) @map("event_type")
+  classId     String?   @map("class_id") @db.Uuid
+  createdBy   String    @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  class   Class? @relation(fields: [classId], references: [id], onDelete: Cascade)
+  creator User   @relation("EventCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("calendar_events")
+}
+
+model Task {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title           String              @db.VarChar(255)
+  description     String?
+  content         String
+  taskType        String              @default("general") @map("task_type") @db.VarChar(50)
+  difficultyLevel TaskDifficultyLevel @default(medium) @map("difficulty_level")
+  estimatedTime   Int                 @default(30) @map("estimated_time")
+  classId         String?             @map("class_id") @db.Uuid
+  createdBy       String              @map("created_by") @db.Uuid
+  isActive        Boolean             @default(true) @map("is_active")
+  tags            String[]
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  class   Class? @relation(fields: [classId], references: [id], onDelete: Cascade)
+  creator User   @relation("TaskCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}

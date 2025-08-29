@@ -2,7 +2,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
-const { pool } = require('../config/database');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -27,12 +28,11 @@ router.post('/register', [
     const { email, password, firstName, lastName, role } = req.body;
 
     // Check if user already exists
-    const existingUser = await pool.query(
-      'SELECT id FROM users WHERE email = $1',
-      [email]
-    );
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
 
-    if (existingUser.rows.length > 0) {
+    if (existingUser) {
       return res.status(409).json({ 
         error: 'User already exists',
         message: 'A user with this email already exists'
@@ -44,14 +44,15 @@ router.post('/register', [
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
     // Create user
-    const result = await pool.query(
-      `INSERT INTO users (email, password_hash, first_name, last_name, role)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, email, first_name, last_name, role, created_at`,
-      [email, passwordHash, firstName, lastName, role]
-    );
-
-    const user = result.rows[0];
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        firstName,
+        lastName,
+        role
+      }
+    });
 
     // Generate JWT token
     const token = jwt.sign(
@@ -65,10 +66,10 @@ router.post('/register', [
       user: {
         id: user.id,
         email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
+        firstName: user.firstName,
+        lastName: user.lastName,
         role: user.role,
-        createdAt: user.created_at
+        createdAt: user.createdAt
       },
       token
     });
@@ -98,22 +99,19 @@ router.post('/login', [
     const { email, password } = req.body;
 
     // Find user
-    const result = await pool.query(
-      'SELECT id, email, password_hash, first_name, last_name, role FROM users WHERE email = $1',
-      [email]
-    );
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(401).json({ 
         error: 'Invalid credentials',
         message: 'Email or password is incorrect'
       });
     }
 
-    const user = result.rows[0];
-
     // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
       return res.status(401).json({ 
         error: 'Invalid credentials',
@@ -133,8 +131,8 @@ router.post('/login', [
       user: {
         id: user.id,
         email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
+        firstName: user.firstName,
+        lastName: user.lastName,
         role: user.role
       },
       token
@@ -151,29 +149,26 @@ router.post('/login', [
 // Get current user profile
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT id, email, first_name, last_name, role, created_at, updated_at
-       FROM users WHERE id = $1`,
-      [req.user.id]
-    );
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ 
         error: 'User not found',
         message: 'User profile not found'
       });
     }
 
-    const user = result.rows[0];
     res.json({
       user: {
         id: user.id,
         email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
+        firstName: user.firstName,
+        lastName: user.lastName,
         role: user.role,
-        createdAt: user.created_at,
-        updatedAt: user.updated_at
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
       }
     });
   } catch (error) {
@@ -200,47 +195,32 @@ router.put('/profile', authenticateToken, [
     }
 
     const { firstName, lastName } = req.body;
-    const updateFields = [];
-    const updateValues = [];
-    let paramCount = 1;
 
-    if (firstName) {
-      updateFields.push(`first_name = $${paramCount++}`);
-      updateValues.push(firstName);
-    }
+    const updateData = {};
+    if (firstName) updateData.firstName = firstName;
+    if (lastName) updateData.lastName = lastName;
 
-    if (lastName) {
-      updateFields.push(`last_name = $${paramCount++}`);
-      updateValues.push(lastName);
-    }
-
-
-    if (updateFields.length === 0) {
+    if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ 
         error: 'No updates provided',
         message: 'Please provide at least one field to update'
       });
     }
 
-    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
-    updateValues.push(req.user.id);
+    const user = await prisma.user.update({
+      where: { id: req.user.id },
+      data: updateData
+    });
 
-    const result = await pool.query(
-      `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${paramCount}
-       RETURNING id, email, first_name, last_name, role, updated_at`,
-      updateValues
-    );
-
-    const user = result.rows[0];
     res.json({
       message: 'Profile updated successfully',
       user: {
         id: user.id,
         email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
+        firstName: user.firstName,
+        lastName: user.lastName,
         role: user.role,
-        updatedAt: user.updated_at
+        updatedAt: user.updatedAt
       }
     });
   } catch (error) {
@@ -268,13 +248,12 @@ router.put('/change-password', authenticateToken, [
 
     const { currentPassword, newPassword } = req.body;
 
-    // Get current password hash
-    const result = await pool.query(
-      'SELECT password_hash FROM users WHERE id = $1',
-      [req.user.id]
-    );
+    // Get current user
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ 
         error: 'User not found',
         message: 'User not found'
@@ -282,7 +261,7 @@ router.put('/change-password', authenticateToken, [
     }
 
     // Verify current password
-    const isValidPassword = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
+    const isValidPassword = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!isValidPassword) {
       return res.status(401).json({ 
         error: 'Invalid password',
@@ -295,10 +274,10 @@ router.put('/change-password', authenticateToken, [
     const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
 
     // Update password
-    await pool.query(
-      'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [newPasswordHash, req.user.id]
-    );
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { passwordHash: newPasswordHash }
+    });
 
     res.json({
       message: 'Password changed successfully'
