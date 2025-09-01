@@ -1,43 +1,86 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { pool } = require('../config/database');
-const { authenticateToken, requireRole, requireOwnership, requireClassEnrollment } = require('../middleware/auth');
+const { PrismaClient } = require('@prisma/client');
+const { authenticateToken, requireRole, requireOwnership } = require('../middleware/auth');
 
 const router = express.Router();
+const prisma = new PrismaClient();
 
 // Test endpoint to verify database connection
 router.get('/test', async (req, res) => {
   try {
     // Test database connection
-    const result = await pool.query('SELECT NOW() as current_time');
-    console.log('Database connection test successful:', result.rows[0]);
+    const result = await prisma.assignment.findMany({
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        due_date: true,
+        priority: true,
+        topic: true,
+        created_at: true,
+        class: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        _count: {
+          select: {
+            submissions: true,
+          },
+        },
+      },
+      where: {
+        createdBy: req.user.id,
+      },
+              orderBy: {
+          dueDate: 'asc',
+        },
+    });
+    console.log('Database connection test successful:', result);
     
     // Check if assignments table exists
-    const tableCheck = await pool.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'assignments'
-      );
-    `);
+    const tableCheck = await prisma.assignment.findMany({
+      select: {
+        id: true,
+      },
+      where: {
+        classId: req.user.id, // Assuming classId is the teacher's ID for this test
+      },
+    });
     
-    const tableExists = tableCheck.rows[0].exists;
+    const tableExists = tableCheck.length > 0;
     console.log('Assignments table exists:', tableExists);
     
     if (tableExists) {
       // Check table structure
-      const structureCheck = await pool.query(`
-        SELECT column_name, data_type, is_nullable 
-        FROM information_schema.columns 
-        WHERE table_name = 'assignments' 
-        ORDER BY ordinal_position
-      `);
-      console.log('Table structure:', structureCheck.rows);
+      const structureCheck = await prisma.assignment.findMany({
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          dueDate: true,
+          priority: true,
+          topic: true,
+          created_at: true,
+          class: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          id: 'asc',
+        },
+      });
+      console.log('Table structure:', structureCheck);
     }
     
     res.json({ 
       message: 'Database test successful',
-      currentTime: result.rows[0].current_time,
+      currentTime: new Date().toISOString(),
       assignmentsTableExists: tableExists
     });
   } catch (error) {
@@ -78,23 +121,19 @@ const createCalendarEvent = async (client, assignment, classId, userId) => {
   try {
     console.log('Creating calendar event for assignment:', { assignment, classId, userId });
     
-    const result = await client.query(
-      `INSERT INTO calendar_events (title, description, start_time, end_time, event_type, class_id, is_all_day, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id`,
-      [
-        assignment.title,
-        assignment.description || `Assignment due for ${assignment.title}`,
-        assignment.due_date, // Use the database column name
-        new Date(new Date(assignment.due_date).getTime() + 24 * 60 * 60 * 1000),
-        'assignment',
-        classId,
-        true,
-        userId
-      ]
-    );
-    console.log('Calendar event created successfully:', result.rows[0]);
-    return result.rows[0].id;
+    const result = await client.calendarEvent.create({
+      data: {
+        title: assignment.title,
+        description: assignment.description || `Assignment due for ${assignment.title}`,
+        startTime: assignment.dueDate, // Use the database column name
+        endTime: new Date(new Date(assignment.dueDate).getTime() + 24 * 60 * 60 * 1000),
+        eventType: 'assignment',
+        classId: classId,
+        createdBy: userId,
+      },
+    });
+    console.log('Calendar event created successfully:', result);
+    return result.id;
   } catch (error) {
     console.error('Failed to create calendar event:', error);
     // Don't throw error, just return null to indicate failure
@@ -107,18 +146,18 @@ const updateCalendarEvent = async (client, assignment, classId, eventId) => {
   try {
     console.log('Updating calendar event with data:', { assignment, classId, eventId });
     
-    await client.query(
-      `UPDATE calendar_events 
-       SET title = $1, description = $2, start_time = $3, end_time = $4, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $5`,
-      [
-        assignment.title,
-        assignment.description || `Assignment due for ${assignment.title}`,
-        assignment.due_date, // Use the database column name
-        new Date(new Date(assignment.due_date).getTime() + 24 * 60 * 60 * 1000),
-        eventId
-      ]
-    );
+    await client.calendarEvent.update({
+      where: {
+        id: eventId,
+      },
+      data: {
+        title: assignment.title,
+        description: assignment.description || `Assignment due for ${assignment.title}`,
+        startTime: assignment.dueDate, // Use the database column name
+        endTime: new Date(new Date(assignment.dueDate).getTime() + 24 * 60 * 60 * 1000),
+        updatedAt: new Date(),
+      },
+    });
     console.log('Calendar event updated successfully');
     return true;
   } catch (error) {
@@ -132,28 +171,34 @@ const handleStudentAssignments = async (client, assignmentId, classId, assignedS
   if (!assignedStudents || assignedStudents.length === 0) return;
 
   // Verify all students are enrolled in the class
-  const enrolledStudents = await client.query(
-    `SELECT student_id FROM class_enrollments WHERE class_id = $1 AND student_id = ANY($2)`,
-    [classId, assignedStudents]
-  );
+  const enrolledStudents = await client.classEnrollment.findMany({
+    where: {
+      classId: classId,
+      studentId: {
+        in: assignedStudents,
+      },
+    },
+  });
 
-  if (enrolledStudents.rows.length !== assignedStudents.length) {
+  if (enrolledStudents.length !== assignedStudents.length) {
     throw new Error('Some students are not enrolled in this class');
   }
 
   // Remove existing assignments
-  await client.query(
-    'DELETE FROM assignment_student_assignments WHERE assignment_id = $1',
-    [assignmentId]
-  );
+  await client.assignmentStudentAssignment.deleteMany({
+    where: {
+      assignmentId: assignmentId,
+    },
+  });
 
   // Insert new assignments
   for (const studentId of assignedStudents) {
-    await client.query(
-      `INSERT INTO assignment_student_assignments (assignment_id, student_id)
-       VALUES ($1, $2)`,
-      [assignmentId, studentId]
-    );
+    await client.assignmentStudentAssignment.create({
+      data: {
+        assignmentId: assignmentId,
+        studentId: studentId,
+      },
+    });
   }
 };
 
@@ -191,8 +236,35 @@ router.get('/', authenticateToken, async (req, res) => {
       `;
     }
 
-    const result = await pool.query(query, params);
-    const assignments = result.rows.map(mapAssignmentRow);
+    const result = await prisma.assignment.findMany({
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        due_date: true,
+        priority: true,
+        topic: true,
+        created_at: true,
+        class: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        _count: {
+          select: {
+            submissions: true,
+          },
+        },
+      },
+      where: {
+        createdBy: req.user.id,
+      },
+      orderBy: {
+        dueDate: 'asc',
+      },
+    });
+    const assignments = result.map(mapAssignmentRow);
     
     res.json({ assignments });
   } catch (error) {
@@ -205,7 +277,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Get assignments for a specific class
-router.get('/class/:classId', authenticateToken, requireClassEnrollment(), async (req, res) => {
+router.get('/class/:classId', authenticateToken, requireRole(['teacher']), async (req, res) => {
   try {
     const { classId } = req.params;
     let query;
@@ -236,8 +308,29 @@ router.get('/class/:classId', authenticateToken, requireClassEnrollment(), async
       params.push(req.user.id);
     }
 
-    const result = await pool.query(query, params);
-    const assignments = result.rows.map(mapAssignmentRow);
+    const result = await prisma.assignment.findMany({
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        dueDate: true,
+        priority: true,
+        topic: true,
+        createdAt: true,
+        _count: {
+          select: {
+            submissions: true,
+          },
+        },
+      },
+      where: {
+        classId: classId,
+      },
+      orderBy: {
+        dueDate: 'asc',
+      },
+    });
+    const assignments = result.map(mapAssignmentRow);
     
     res.json({ assignments });
   } catch (error) {
@@ -283,16 +376,40 @@ router.get('/:id', authenticateToken, async (req, res) => {
       params.push(req.user.id);
     }
 
-    const result = await pool.query(query, params);
+    const result = await prisma.assignment.findFirst({
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        dueDate: true,
+        priority: true,
+        topic: true,
+        createdAt: true,
+        class: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        _count: {
+          select: {
+            submissions: true,
+          },
+        },
+      },
+      where: {
+        id: id,
+      },
+    });
     
-    if (result.rows.length === 0) {
+    if (!result) {
       return res.status(404).json({ 
         error: 'Assignment not found',
         message: 'The requested assignment does not exist'
       });
     }
 
-    const assignment = mapAssignmentRow(result.rows[0]);
+    const assignment = mapAssignmentRow(result);
     res.json({ assignment });
   } catch (error) {
     console.error('Error fetching assignment:', error);
@@ -335,12 +452,14 @@ router.post('/', authenticateToken, requireRole(['teacher']), [
     const { title, description, classId, dueDate, priority, topic, assignedStudents } = req.body;
 
     // Check if teacher owns the class
-    const classResult = await pool.query(
-      'SELECT id FROM classes WHERE id = $1 AND teacher_id = $2',
-      [classId, req.user.id]
-    );
+    const classResult = await prisma.class.findFirst({
+      where: {
+        id: classId,
+        teacherId: req.user.id,
+      },
+    });
 
-    if (classResult.rows.length === 0) {
+    if (!classResult) {
       console.log('Access denied: Teacher does not own class');
       return res.status(403).json({ 
         error: 'Access denied',
@@ -348,19 +467,24 @@ router.post('/', authenticateToken, requireRole(['teacher']), [
       });
     }
 
-    const client = await pool.connect();
+    const client = prisma;
     try {
-      await client.query('BEGIN');
+      await client.$transaction(async (tx) => {
 
       // Create the assignment
-      const result = await client.query(
-        `INSERT INTO assignments (title, description, class_id, due_date, priority, topic, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, title, description, due_date, priority, topic, created_at`,
-        [title, description, classId, dueDate, priority || 'normal', topic, req.user.id]
-      );
+      const result = await client.assignment.create({
+        data: {
+          title: title,
+          description: description,
+          classId: classId,
+          dueDate: dueDate,
+          priority: priority || 'normal',
+          topic: topic,
+          createdBy: req.user.id,
+        },
+      });
 
-      const newAssignment = result.rows[0];
+      const newAssignment = result;
       console.log('Assignment created:', newAssignment);
 
       // Handle student assignments
@@ -370,7 +494,7 @@ router.post('/', authenticateToken, requireRole(['teacher']), [
       const calendarEventId = await createCalendarEvent(client, newAssignment, classId, req.user.id);
       console.log('Calendar event created with ID:', calendarEventId);
 
-      await client.query('COMMIT');
+      });
 
       const responseAssignment = mapAssignmentRow(newAssignment);
       console.log('Sending response:', responseAssignment);
@@ -381,10 +505,9 @@ router.post('/', authenticateToken, requireRole(['teacher']), [
       });
     } catch (error) {
       console.error('Error in transaction:', error);
-      await client.query('ROLLBACK');
       throw error;
     } finally {
-      client.release();
+      // No explicit client.release() needed for Prisma
     }
   } catch (error) {
     console.error('Error creating assignment:', error);
@@ -471,93 +594,139 @@ router.put('/:id', authenticateToken, requireRole(['teacher']), requireOwnership
     // Add the WHERE clause parameter (assignment ID)
     updateValues.push(id);
 
-    const client = await pool.connect();
+    const client = prisma;
     try {
-      await client.query('BEGIN');
+      await client.$transaction(async (tx) => {
 
       // Get the current assignment values before update
-      const currentAssignment = await client.query(
-        'SELECT id, title, description, due_date, priority, topic FROM assignments WHERE id = $1',
-        [id]
-      );
+      const currentAssignment = await tx.assignment.findFirst({
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          dueDate: true,
+          priority: true,
+          topic: true,
+        },
+        where: {
+          id: id,
+        },
+      });
       
-      if (currentAssignment.rows.length === 0) {
+      if (!currentAssignment) {
         throw new Error('Assignment not found');
       }
       
-      console.log('Current assignment values:', currentAssignment.rows[0]);
+      console.log('Current assignment values:', currentAssignment);
 
       // Update the assignment
       const updateQuery = `UPDATE assignments SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING id, title, description, due_date, priority, topic, updated_at`;
       console.log('Update query:', updateQuery);
       console.log('Update parameters:', updateValues);
       
-      const result = await client.query(updateQuery, updateValues);
+      const result = await tx.assignment.update({
+        where: {
+          id: id,
+        },
+        data: {
+          title: title,
+          description: description,
+          dueDate: dueDate,
+          priority: priority,
+          topic: topic,
+          updatedAt: new Date(),
+        },
+      });
 
-      if (result.rows.length === 0) {
+      if (!result) {
         console.log('Assignment not found for update');
         throw new Error('Assignment not found');
       }
 
-      const updatedAssignment = result.rows[0];
+      const updatedAssignment = result;
       console.log('Assignment updated successfully:', updatedAssignment);
       console.log('Changes made:');
-      console.log('  Title:', currentAssignment.rows[0].title, '->', updatedAssignment.title);
-      console.log('  Description:', currentAssignment.rows[0].description, '->', updatedAssignment.description);
-      console.log('  Due Date:', currentAssignment.rows[0].due_date, '->', updatedAssignment.due_date);
-      console.log('  Priority:', currentAssignment.rows[0].priority, '->', updatedAssignment.priority);
-      console.log('  Topic:', currentAssignment.rows[0].topic, '->', updatedAssignment.topic);
+      console.log('  Title:', currentAssignment.title, '->', updatedAssignment.title);
+      console.log('  Description:', currentAssignment.description, '->', updatedAssignment.description);
+      console.log('  Due Date:', currentAssignment.dueDate, '->', updatedAssignment.dueDate);
+      console.log('  Priority:', currentAssignment.priority, '->', updatedAssignment.priority);
+      console.log('  Topic:', currentAssignment.topic, '->', updatedAssignment.topic);
 
       // Handle student assignments
       if (assignedStudents !== undefined) {
-        const classResult = await client.query(
-          'SELECT class_id FROM assignments WHERE id = $1',
-          [id]
-        );
+        const classResult = await tx.assignment.findFirst({
+          select: {
+            classId: true,
+          },
+          where: {
+            id: id,
+          },
+        });
         
-        if (classResult.rows.length > 0) {
-          const classId = classResult.rows[0].class_id;
+        if (classResult) {
+          const classId = classResult.classId;
           await handleStudentAssignments(client, id, classId, assignedStudents);
         }
       }
 
       // Update calendar event
       console.log('Looking for existing calendar event...');
-      const existingEvent = await client.query(
-        `SELECT id FROM calendar_events WHERE event_type = 'assignment' AND class_id = (
-          SELECT class_id FROM assignments WHERE id = $1
-        )`,
-        [id]
-      );
+      const existingEvent = await tx.calendarEvent.findFirst({
+        where: {
+          eventType: 'assignment',
+          classId: (await tx.assignment.findFirst({
+            select: {
+              classId: true,
+            },
+            where: {
+              id: id,
+            },
+          })).classId,
+        },
+      });
       
-      console.log('Existing calendar event found:', existingEvent.rows);
+      console.log('Existing calendar event found:', existingEvent);
 
-      if (existingEvent.rows.length > 0) {
+      if (existingEvent) {
         console.log('Updating existing calendar event...');
-        await updateCalendarEvent(client, updatedAssignment, null, existingEvent.rows[0].id);
+        await updateCalendarEvent(client, updatedAssignment, null, existingEvent.id);
       } else {
         console.log('Creating new calendar event...');
-        const classResult = await client.query(
-          'SELECT class_id FROM assignments WHERE id = $1',
-          [id]
-        );
+        const classResult = await tx.assignment.findFirst({
+          select: {
+            class_id: true,
+          },
+          where: {
+            id: id,
+          },
+        });
         
-        if (classResult.rows.length > 0) {
-          const classId = classResult.rows[0].class_id;
+        if (classResult) {
+          const classId = classResult.classId;
           await createCalendarEvent(client, updatedAssignment, classId, req.user.id);
         }
       }
 
-      await client.query('COMMIT');
+      });
 
       // Verify the update was actually committed to the database
-      const verificationResult = await client.query(
-        'SELECT id, title, description, due_date, priority, topic, updated_at FROM assignments WHERE id = $1',
-        [id]
-      );
+      const verificationResult = await prisma.assignment.findFirst({
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          dueDate: true,
+          priority: true,
+          topic: true,
+          updatedAt: true,
+        },
+        where: {
+          id: id,
+        },
+      });
       
-      if (verificationResult.rows.length > 0) {
-        console.log('Database verification - Final assignment values:', verificationResult.rows[0]);
+      if (verificationResult) {
+        console.log('Database verification - Final assignment values:', verificationResult);
       }
 
       const responseAssignment = mapAssignmentRow(updatedAssignment);
@@ -568,10 +737,9 @@ router.put('/:id', authenticateToken, requireRole(['teacher']), requireOwnership
         assignment: responseAssignment
       });
     } catch (error) {
-      await client.query('ROLLBACK');
       throw error;
     } finally {
-      client.release();
+      // No explicit client.release() needed for Prisma
     }
   } catch (error) {
     console.error('Error updating assignment:', error);
@@ -587,47 +755,56 @@ router.delete('/:id', authenticateToken, requireRole(['teacher']), requireOwners
   try {
     const { id } = req.params;
 
-    const client = await pool.connect();
+    const client = prisma;
     try {
-      await client.query('BEGIN');
+      await client.$transaction(async (tx) => {
 
       // Get assignment info before deletion
-      const assignmentResult = await client.query(
-        'SELECT id, title, class_id FROM assignments WHERE id = $1',
-        [id]
-      );
+      const assignmentResult = await tx.assignment.findFirst({
+        select: {
+          id: true,
+          title: true,
+          classId: true,
+        },
+        where: {
+          id: id,
+        },
+      });
 
-      if (assignmentResult.rows.length === 0) {
+      if (!assignmentResult) {
         return res.status(404).json({ 
           error: 'Assignment not found',
           message: 'The requested assignment does not exist'
         });
       }
 
-      const assignment = assignmentResult.rows[0];
+      const assignment = assignmentResult;
 
       // Delete the assignment
-      await client.query('DELETE FROM assignments WHERE id = $1', [id]);
+      await tx.assignment.delete({
+        where: {
+          id: id,
+        },
+      });
 
       // Delete corresponding calendar event
-      await client.query(
-        `DELETE FROM calendar_events 
-         WHERE event_type = 'assignment' 
-         AND title = $1 
-         AND class_id = $2`,
-        [assignment.title, assignment.class_id]
-      );
+      await tx.calendarEvent.deleteMany({
+        where: {
+          eventType: 'assignment',
+          title: assignment.title,
+          classId: assignment.classId,
+        },
+      });
 
-      await client.query('COMMIT');
+      });
 
       res.json({
         message: 'Assignment deleted successfully'
       });
     } catch (error) {
-      await client.query('ROLLBACK');
       throw error;
     } finally {
-      client.release();
+      // No explicit client.release() needed for Prisma
     }
   } catch (error) {
     console.error('Error deleting assignment:', error);
@@ -656,14 +833,14 @@ router.post('/:id/submit', authenticateToken, requireRole(['student']), [
     const { submissionText, fileUrl } = req.body;
 
     // Check if student is enrolled in the class
-    const enrollmentCheck = await pool.query(
-      `SELECT 1 FROM class_enrollments ce
-       INNER JOIN assignments a ON ce.class_id = a.class_id
-       WHERE a.id = $1 AND ce.student_id = $2`,
-      [id, req.user.id]
-    );
+    const enrollmentCheck = await prisma.classEnrollment.findFirst({
+      where: {
+        classId: id,
+        studentId: req.user.id,
+      },
+    });
 
-    if (enrollmentCheck.rows.length === 0) {
+    if (!enrollmentCheck) {
       return res.status(403).json({ 
         error: 'Access denied',
         message: 'You can only submit assignments for classes you are enrolled in'
@@ -671,12 +848,14 @@ router.post('/:id/submit', authenticateToken, requireRole(['student']), [
     }
 
     // Check if already submitted
-    const existingSubmission = await pool.query(
-      'SELECT id FROM assignment_submissions WHERE assignment_id = $1 AND student_id = $2',
-      [id, req.user.id]
-    );
+    const existingSubmission = await prisma.assignmentSubmission.findFirst({
+      where: {
+        assignment_id: id,
+        student_id: req.user.id,
+      },
+    });
 
-    if (existingSubmission.rows.length > 0) {
+    if (existingSubmission) {
       return res.status(400).json({ 
         error: 'Already submitted',
         message: 'You have already submitted this assignment'
@@ -684,18 +863,20 @@ router.post('/:id/submit', authenticateToken, requireRole(['student']), [
     }
 
     // Create submission
-    const result = await pool.query(
-      `INSERT INTO assignment_submissions (assignment_id, student_id, submission_text, file_url)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, submitted_at`,
-      [id, req.user.id, submissionText, fileUrl]
-    );
+    const result = await prisma.assignmentSubmission.create({
+      data: {
+        assignmentId: id,
+        studentId: req.user.id,
+        content: submissionText,
+        filePath: fileUrl,
+      },
+    });
 
     res.status(201).json({
       message: 'Assignment submitted successfully',
       submission: {
-        id: result.rows[0].id,
-        submittedAt: result.rows[0].submitted_at
+        id: result.id,
+        submittedAt: result.submittedAt
       }
     });
   } catch (error) {
@@ -712,27 +893,39 @@ router.get('/:id/submissions', authenticateToken, requireRole(['teacher']), requ
   try {
     const { id } = req.params;
 
-    const result = await pool.query(
-      `SELECT 
-        ass.id, ass.submission_text, ass.file_url, ass.submitted_at, ass.grade,
-        u.first_name, u.last_name, u.email
-       FROM assignment_submissions ass
-       INNER JOIN users u ON ass.student_id = u.id
-       WHERE ass.assignment_id = $1
-       ORDER BY ass.submitted_at ASC`,
-      [id]
-    );
+    const result = await prisma.assignmentSubmission.findMany({
+      select: {
+        id: true,
+        content: true,
+        filePath: true,
+        submittedAt: true,
+        grade: true,
+        student: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+      where: {
+        assignmentId: id,
+      },
+      orderBy: {
+        submittedAt: 'asc',
+      },
+    });
 
-    const submissions = result.rows.map(row => ({
+    const submissions = result.map(row => ({
       id: row.id,
-      submissionText: row.submission_text,
-      fileUrl: row.file_url,
-      submittedAt: row.submitted_at,
+      submissionText: row.content,
+      fileUrl: row.filePath,
+      submittedAt: row.submittedAt,
       grade: row.grade,
       student: {
-        firstName: row.first_name,
-        lastName: row.last_name,
-        email: row.email
+        firstName: row.student.firstName,
+        lastName: row.student.lastName,
+        email: row.student.email
       }
     }));
 
@@ -764,12 +957,14 @@ router.put('/:id/grade/:submissionId', authenticateToken, requireRole(['teacher'
     const { grade, feedback } = req.body;
 
     // Verify submission belongs to this assignment
-    const submissionCheck = await pool.query(
-      'SELECT 1 FROM assignment_submissions WHERE id = $1 AND assignment_id = $2',
-      [submissionId, id]
-    );
+    const submissionCheck = await prisma.assignmentSubmission.findFirst({
+      where: {
+        id: submissionId,
+        assignmentId: id,
+      },
+    });
 
-    if (submissionCheck.rows.length === 0) {
+    if (!submissionCheck) {
       return res.status(404).json({ 
         error: 'Submission not found',
         message: 'The requested submission does not exist'
@@ -777,21 +972,23 @@ router.put('/:id/grade/:submissionId', authenticateToken, requireRole(['teacher'
     }
 
     // Update grade
-    const result = await pool.query(
-      `UPDATE assignment_submissions 
-       SET grade = $1, feedback = $2, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3
-       RETURNING id, grade, feedback, updated_at`,
-      [grade, feedback, submissionId]
-    );
+    const result = await prisma.assignmentSubmission.update({
+      where: {
+        id: submissionId,
+      },
+      data: {
+        grade: grade,
+        feedback: feedback,
+      },
+    });
 
     res.json({
       message: 'Grade updated successfully',
       submission: {
-        id: result.rows[0].id,
-        grade: result.rows[0].grade,
-        feedback: result.rows[0].feedback,
-        updatedAt: result.rows[0].updated_at
+        id: result.id,
+        grade: result.grade,
+        feedback: result.feedback,
+        updatedAt: result.updatedAt
       }
     });
   } catch (error) {
@@ -822,22 +1019,25 @@ router.post('/:id/attachments', authenticateToken, requireRole(['teacher']), req
     const { id } = req.params;
     const { name, url, size, type } = req.body;
 
-    const result = await pool.query(
-      `INSERT INTO assignment_attachments (assignment_id, name, url, size, type)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, url, size, type, uploaded_at`,
-      [id, name, url, size, type]
-    );
+    const result = await prisma.assignmentAttachment.create({
+      data: {
+        assignmentId: id,
+        name: name,
+        url: url,
+        size: size,
+        type: type,
+      },
+    });
 
     res.status(201).json({
       message: 'Attachment uploaded successfully',
       attachment: {
-        id: result.rows[0].id,
-        name: result.rows[0].name,
-        url: result.rows[0].url,
-        size: result.rows[0].size,
-        type: result.rows[0].type,
-        uploadedAt: result.rows[0].uploaded_at
+        id: result.id,
+        name: result.name,
+        url: result.url,
+        size: result.size,
+        type: result.type,
+        uploadedAt: result.uploadedAt
       }
     });
   } catch (error) {

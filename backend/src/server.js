@@ -5,7 +5,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
-const { initializeDatabase } = require('./config/database');
+const { PrismaClient } = require('@prisma/client');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -18,6 +18,7 @@ const taskRoutes = require('./routes/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+const prisma = new PrismaClient();
 
 // Security middleware
 app.use(helmet());
@@ -95,8 +96,9 @@ app.use((err, req, res, next) => {
 // Start server
 const startServer = async () => {
   try {
-    // Initialize database
-    await initializeDatabase();
+    // Test Prisma connection
+    await prisma.$connect();
+    console.log('✅ Database connection successful');
     
     app.listen(PORT, () => {
       console.log(`🚀 TutoriAI Backend server running on port ${PORT}`);
@@ -105,9 +107,23 @@ const startServer = async () => {
     });
   } catch (error) {
     console.error('Failed to start server:', error);
+    await prisma.$disconnect();
     process.exit(1);
   }
 };
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('Shutting down gracefully...');
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('Shutting down gracefully...');
+  await prisma.$disconnect();
+  process.exit(0);
+});
 
 startServer();
 

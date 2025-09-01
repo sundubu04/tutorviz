@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     description TEXT,
     start_time TIMESTAMP NOT NULL,
     end_time TIMESTAMP NOT NULL,
-    event_type VARCHAR(50) DEFAULT 'general',
+    event_type VARCHAR(50) DEFAULT 'other' CHECK (event_type IN ('class', 'assignment', 'exam', 'meeting', 'other')),
     is_all_day BOOLEAN DEFAULT false,
     class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
     created_by UUID REFERENCES users(id) ON DELETE CASCADE,

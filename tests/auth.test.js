@@ -1,4 +1,4 @@
-const ApiClient = require('../src/utils/apiClient');
+const ApiClient = require('../backend/src/utils/apiClient');
 
 class AuthTestSuite {
   constructor() {

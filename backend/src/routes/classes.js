@@ -1,122 +1,109 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const jwt = require('jsonwebtoken');
-const { pool } = require('../config/database');
+const { PrismaClient } = require('@prisma/client');
 const { authenticateToken, requireRole, requireOwnership } = require('../middleware/auth');
 
 const router = express.Router();
+const prisma = new PrismaClient();
 
-// Get all classes (public access - for calendar event creation)
-router.get('/', async (req, res) => {
+// Get all classes (requires authentication)
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    // If no authentication, return all classes (for calendar event creation)
-    if (!req.headers.authorization) {
-      const query = `
-        SELECT 
-          c.id, c.name, c.description, c.icon_name, c.icon_color, c.created_at,
-          u.first_name as teacher_first_name, u.last_name as teacher_last_name,
-          COUNT(DISTINCT ce.student_id) as student_count,
-          COUNT(DISTINCT a.id) as assignment_count,
-          'public' as type
-        FROM classes c
-        LEFT JOIN users u ON c.teacher_id = u.id
-        LEFT JOIN class_enrollments ce ON c.id = ce.class_id
-        LEFT JOIN assignments a ON c.id = a.class_id
-        GROUP BY c.id, u.first_name, u.last_name
-        ORDER BY c.name ASC
-      `;
-      
-      const result = await pool.query(query);
-      
-      const classes = result.rows.map(row => ({
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        iconName: row.icon_name,
-        iconColor: row.icon_color,
-        teacherName: row.teacher_first_name && row.teacher_last_name 
-          ? `${row.teacher_first_name} ${row.teacher_last_name}` 
-          : 'No teacher assigned',
-        studentCount: parseInt(row.student_count),
-        assignmentCount: parseInt(row.assignment_count),
-        type: row.type,
-        createdAt: row.created_at
-      }));
-
-      return res.json({ classes });
-    }
-
-    // If authenticated, use the existing logic
-    const token = req.headers.authorization.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    
-
-    
-    let query;
-    let params = [];
-
     // Extract userId and role from the decoded token
-    const userId = req.user.userId;
+    const userId = req.user.id;
     const userRole = req.user.role;
     
+    let classes = [];
 
-    
     if (userRole === 'teacher') {
       // Teachers see classes they teach
-      query = `
-        SELECT 
-          c.id, c.name, c.description, c.icon_name, c.icon_color, c.created_at,
-          u.first_name as teacher_first_name, u.last_name as teacher_last_name,
-          COUNT(DISTINCT ce.student_id) as student_count,
-          COUNT(DISTINCT a.id) as assignment_count,
-          'teaching' as type
-        FROM classes c
-        LEFT JOIN users u ON c.teacher_id = u.id
-        LEFT JOIN class_enrollments ce ON c.id = ce.class_id
-        LEFT JOIN assignments a ON c.id = a.class_id
-        WHERE c.teacher_id = $1
-        GROUP BY c.id, c.name, c.description, c.icon_name, c.icon_color, c.created_at, u.first_name, u.last_name
-        ORDER BY c.created_at DESC
-      `;
-      params = [userId];
+      classes = await prisma.class.findMany({
+        where: {
+          teacherId: userId
+        },
+        include: {
+          teacher: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          },
+          enrollments: {
+            select: {
+              studentId: true
+            }
+          },
+          assignments: {
+            select: {
+              id: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+
+      classes = classes.map(cls => ({
+        id: cls.id,
+        name: cls.name,
+        description: cls.description,
+        iconName: cls.iconName,
+        iconColor: cls.iconColor,
+        teacherName: `${cls.teacher.firstName} ${cls.teacher.lastName}`,
+        studentCount: cls.enrollments.length,
+        assignmentCount: cls.assignments.length,
+        type: 'teaching',
+        createdAt: cls.createdAt
+      }));
     } else {
       // Students see classes they're enrolled in
-      query = `
-        SELECT 
-          c.id, c.name, c.description, c.icon_name, c.icon_color, c.created_at,
-          u.first_name as teacher_first_name, u.last_name as teacher_last_name,
-          COUNT(DISTINCT ce2.student_id) as student_count,
-          COUNT(DISTINCT a.id) as assignment_count,
-          'enrolled' as type
-        FROM classes c
-        INNER JOIN class_enrollments ce ON c.id = ce.class_id
-        LEFT JOIN users u ON c.teacher_id = u.id
-        LEFT JOIN class_enrollments ce2 ON c.id = ce2.class_id
-        LEFT JOIN assignments a ON c.id = a.class_id
-        WHERE ce.student_id = $1
-        GROUP BY c.id, u.first_name, u.last_name
-        ORDER BY c.created_at DESC
-      `;
-      params = [userId];
+      const enrollments = await prisma.classEnrollment.findMany({
+        where: {
+          studentId: userId
+        },
+        include: {
+          class: {
+            include: {
+              teacher: {
+                select: {
+                  firstName: true,
+                  lastName: true
+                }
+              },
+              enrollments: {
+                select: {
+                  studentId: true
+                }
+              },
+              assignments: {
+                select: {
+                  id: true
+                }
+              }
+            }
+          }
+        },
+        orderBy: {
+          class: {
+            createdAt: 'desc'
+          }
+        }
+      });
+
+      classes = enrollments.map(enrollment => ({
+        id: enrollment.class.id,
+        name: enrollment.class.name,
+        description: enrollment.class.description,
+        iconName: enrollment.class.iconName,
+        iconColor: enrollment.class.iconColor,
+        teacherName: `${enrollment.class.teacher.firstName} ${enrollment.class.teacher.lastName}`,
+        studentCount: enrollment.class.enrollments.length,
+        assignmentCount: enrollment.class.assignments.length,
+        type: 'enrolled',
+        createdAt: enrollment.class.createdAt
+      }));
     }
-
-    const result = await pool.query(query, params);
-    
-
-    
-    const classes = result.rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      description: row.description,
-      iconName: row.icon_name,
-      iconColor: row.icon_color,
-      teacherName: `${row.teacher_first_name} ${row.teacher_last_name}`,
-      studentCount: parseInt(row.student_count),
-      assignmentCount: parseInt(row.assignment_count),
-      type: row.type,
-      createdAt: row.created_at
-    }));
 
     res.json({ classes });
   } catch (error) {
@@ -134,98 +121,120 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
 
     // Check if user has access to this class
-    let accessQuery;
-    let accessParams = [id];
+    let hasAccess = false;
 
     if (req.user.role === 'teacher') {
-      accessQuery = 'SELECT id FROM classes WHERE id = $1 AND teacher_id = $2';
-      accessParams.push(req.user.id);
+      const teacherClass = await prisma.class.findFirst({
+        where: {
+          id: id,
+          teacherId: req.user.id
+        }
+      });
+      hasAccess = !!teacherClass;
     } else {
-      accessQuery = `
-        SELECT c.id FROM classes c
-        INNER JOIN class_enrollments ce ON c.id = ce.class_id
-        WHERE c.id = $1 AND ce.student_id = $2
-      `;
-      accessParams.push(req.user.id);
+      const enrollment = await prisma.classEnrollment.findFirst({
+        where: {
+          classId: id,
+          studentId: req.user.id
+        }
+      });
+      hasAccess = !!enrollment;
     }
 
-    const accessResult = await pool.query(accessQuery, accessParams);
-    if (accessResult.rows.length === 0) {
+    if (!hasAccess) {
       return res.status(403).json({ 
         error: 'Access denied',
         message: 'You do not have access to this class'
       });
     }
 
-    // Get class details
-    const classResult = await pool.query(`
-      SELECT 
-        c.id, c.name, c.description, c.icon_name, c.icon_color, c.created_at,
-        u.first_name as teacher_first_name, u.last_name as teacher_last_name,
-        u.email as teacher_email
-      FROM classes c
-      LEFT JOIN users u ON c.teacher_id = u.id
-      WHERE c.id = $1
-    `, [id]);
+    // Get class details with teacher info
+    const classData = await prisma.class.findUnique({
+      where: { id: id },
+      include: {
+        teacher: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        }
+      }
+    });
 
-    if (classResult.rows.length === 0) {
+    if (!classData) {
       return res.status(404).json({ 
         error: 'Class not found',
         message: 'The requested class does not exist'
       });
     }
 
-    const classData = classResult.rows[0];
-
     // Get enrolled students
-    const studentsResult = await pool.query(`
-      SELECT 
-        u.id, u.first_name, u.last_name, u.email, u.avatar_url,
-        ce.enrolled_at
-      FROM class_enrollments ce
-      INNER JOIN users u ON ce.student_id = u.id
-      WHERE ce.class_id = $1
-      ORDER BY u.first_name, u.last_name
-    `, [id]);
+    const students = await prisma.classEnrollment.findMany({
+      where: { classId: id },
+      include: {
+        student: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            avatarUrl: true
+          }
+        }
+      },
+      orderBy: {
+        student: {
+          firstName: 'asc'
+        }
+      }
+    });
 
     // Get assignments
-    const assignmentsResult = await pool.query(`
-      SELECT 
-        id, title, description, due_date, is_urgent, created_at
-      FROM assignments
-      WHERE class_id = $1
-      ORDER BY due_date ASC
-    `, [id]);
+    const assignments = await prisma.assignment.findMany({
+      where: { classId: id },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        dueDate: true,
+        priority: true,
+        createdAt: true
+      },
+      orderBy: {
+        dueDate: 'asc'
+      }
+    });
 
     res.json({
       class: {
         id: classData.id,
         name: classData.name,
         description: classData.description,
-        iconName: classData.icon_name,
-        iconColor: classData.icon_color,
+        iconName: classData.iconName,
+        iconColor: classData.iconColor,
         teacher: {
-          firstName: classData.teacher_first_name,
-          lastName: classData.teacher_last_name,
-          email: classData.teacher_email
+          firstName: classData.teacher.firstName,
+          lastName: classData.teacher.lastName,
+          email: classData.teacher.email
         },
-        students: studentsResult.rows.map(student => ({
-          id: student.id,
-          firstName: student.first_name,
-          lastName: student.last_name,
-          email: student.email,
-          avatarUrl: student.avatar_url,
-          enrolledAt: student.enrolled_at
+        students: students.map(enrollment => ({
+          id: enrollment.student.id,
+          firstName: enrollment.student.firstName,
+          lastName: enrollment.student.lastName,
+          email: enrollment.student.email,
+          avatarUrl: enrollment.student.avatarUrl,
+          enrolledAt: enrollment.enrolledAt
         })),
-        assignments: assignmentsResult.rows.map(assignment => ({
+        assignments: assignments.map(assignment => ({
           id: assignment.id,
           title: assignment.title,
           description: assignment.description,
-          dueDate: assignment.due_date,
-          isUrgent: assignment.is_urgent,
-          createdAt: assignment.created_at
+          dueDate: assignment.dueDate,
+          isUrgent: assignment.priority === 'urgent',
+          createdAt: assignment.createdAt
         })),
-        createdAt: classData.created_at
+        createdAt: classData.createdAt
       }
     });
   } catch (error) {
@@ -245,8 +254,13 @@ router.post('/', authenticateToken, requireRole(['teacher']), [
   body('iconColor').optional().trim()
 ], async (req, res) => {
   try {
+    console.log('🔍 [CLASS CREATION] Starting class creation...');
+    console.log('🔍 [CLASS CREATION] User:', req.user);
+    console.log('🔍 [CLASS CREATION] Request body:', req.body);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ [CLASS CREATION] Validation failed:', errors.array());
       return res.status(400).json({ 
         error: 'Validation failed',
         errors: errors.array()
@@ -254,13 +268,17 @@ router.post('/', authenticateToken, requireRole(['teacher']), [
     }
 
     const { name, description, iconName, iconColor } = req.body;
+    console.log('🔍 [CLASS CREATION] Extracted data:', { name, description, iconName, iconColor });
+    console.log('🔍 [CLASS CREATION] User ID to use:', req.user.id);
 
+    console.log('🔍 [CLASS CREATION] Executing database query...');
     const result = await pool.query(
       `INSERT INTO classes (name, description, icon_name, icon_color, teacher_id)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, name, description, icon_name, icon_color, created_at`,
       [name, description, iconName, iconColor, req.user.id]
     );
+    console.log('✅ [CLASS CREATION] Database query successful, result:', result.rows[0]);
 
     const newClass = result.rows[0];
 
@@ -276,7 +294,11 @@ router.post('/', authenticateToken, requireRole(['teacher']), [
       }
     });
   } catch (error) {
-    console.error('Class creation error:', error);
+    console.error('❌ [CLASS CREATION] Class creation error:', error);
+    console.error('❌ [CLASS CREATION] Error name:', error.name);
+    console.error('❌ [CLASS CREATION] Error code:', error.code);
+    console.error('❌ [CLASS CREATION] Error message:', error.message);
+    console.error('❌ [CLASS CREATION] Error stack:', error.stack);
     console.error('Error details:', {
       code: error.code,
       constraint: error.constraint,
@@ -531,7 +553,7 @@ router.delete('/:id/enroll/:studentId', authenticateToken, requireRole(['teacher
 
 // Get students for a class (teachers only)
 router.get('/:id/students', authenticateToken, requireRole(['teacher']), requireOwnership('classes', 'id', 'teacher_id'), async (req, res) => {
-  console.log(`👥 [CLASSES] GET /${req.params.id}/students - User: ${req.user.first_name} ${req.user.last_name} (${req.user.role})`);
+  console.log(`👥 [CLASSES] GET /${req.params.id}/students - User: ${req.user.firstName} ${req.user.lastName} (${req.user.role})`);
   
   try {
     const { id: classId } = req.params;

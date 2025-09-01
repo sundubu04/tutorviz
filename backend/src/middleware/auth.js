@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
-const { pool } = require('../config/database');
+const { PrismaClient } = require('@prisma/client');
+
+const prisma = new PrismaClient();
 
 // Helper function to create consistent error responses
 const createErrorResponse = (statusCode, error, message) => {
@@ -92,20 +94,17 @@ const authenticateToken = async (req, res, next) => {
     }
     
     // Enhanced user lookup with additional security checks
-    const userResult = await pool.query(
-      `SELECT id, email, first_name, last_name, role, created_at, updated_at
-       FROM users 
-       WHERE id = $1`,
-      [decoded.userId]
-    );
+    const user = await prisma.user.findUnique({
+      where: {
+        id: decoded.userId
+      }
+    });
 
-    if (userResult.rows.length === 0) {
+    if (!user) {
       return res.status(401).json(createErrorResponse(401, 'Invalid token', 
         'User not found, account has been deleted, or account is inactive'));
     }
 
-    const user = userResult.rows[0];
-    
     // Add user info to request with additional metadata
     req.user = {
       id: user.id,
@@ -159,7 +158,7 @@ const requireRole = (roles) => {
 };
 
 // Check if user owns the resource or is admin
-const requireOwnership = (resourceTable, resourceIdField = 'id', ownerField = 'created_by') => {
+const requireOwnership = (resourceTable, resourceIdField = 'id', ownerField = 'createdBy') => {
   return async (req, res, next) => {
     try {
       if (!req.user) {
@@ -179,17 +178,18 @@ const requireOwnership = (resourceTable, resourceIdField = 'id', ownerField = 'c
       }
 
       // Check if user owns the resource
-      const result = await pool.query(
-        `SELECT ${ownerField} FROM ${resourceTable} WHERE id = $1`,
-        [resourceId]
-      );
+      const resource = await prisma[resourceTable].findUnique({
+        where: {
+          id: resourceId
+        }
+      });
 
-      if (result.rows.length === 0) {
+      if (!resource) {
         return res.status(404).json(createErrorResponse(404, 'Resource not found', 
           'The requested resource does not exist'));
       }
 
-      if (result.rows[0][ownerField] !== req.user.id) {
+      if (resource[ownerField] !== req.user.id) {
         return res.status(403).json(createErrorResponse(403, 'Access denied', 
           'You do not have permission to access this resource'));
       }
@@ -212,7 +212,7 @@ const requireClassEnrollment = () => {
           'Please authenticate first'));
       }
 
-      const classId = req.params.classId || req.body.class_id;
+      const classId = req.params.classId || req.body.classId;
       if (!classId) {
         return res.status(400).json(createErrorResponse(400, 'Class ID required', 
           'Class ID is missing from request'));
@@ -224,12 +224,14 @@ const requireClassEnrollment = () => {
       }
 
       // Check if student is enrolled in the class
-      const result = await pool.query(
-        'SELECT * FROM class_enrollments WHERE class_id = $1 AND student_id = $2',
-        [classId, req.user.id]
-      );
+      const enrollment = await prisma.classEnrollment.findFirst({
+        where: {
+          classId: classId,
+          studentId: req.user.id
+        }
+      });
 
-      if (result.rows.length === 0) {
+      if (!enrollment) {
         return res.status(403).json(createErrorResponse(403, 'Not enrolled', 
           'You are not enrolled in this class'));
       }
@@ -249,27 +251,27 @@ const handleDatabaseErrors = (error, req, res, next) => {
   
   // Handle specific PostgreSQL error codes
   switch (error.code) {
-    case '23505': // Unique violation
-      if (error.constraint === 'unique_class_name_per_teacher') {
+    case 'P2002': // Unique violation
+      if (error.meta?.target?.includes('class_name_per_teacher')) {
         return res.status(409).json(createErrorResponse(409, 'Duplicate resource', 
           'A class with this name already exists for this teacher'));
       }
-      if (error.constraint === 'unique_class_name_per_teacher') {
+      if (error.meta?.target?.includes('class_name_per_teacher')) {
         return res.status(409).json(createErrorResponse(409, 'Duplicate resource', 
           'This resource already exists'));
       }
       return res.status(409).json(createErrorResponse(409, 'Duplicate resource', 
         'A resource with these details already exists'));
       
-    case '23503': // Foreign key violation
+    case 'P2025': // Foreign key violation
       return res.status(400).json(createErrorResponse(400, 'Invalid reference', 
         'The referenced resource does not exist'));
       
-    case '23502': // Not null violation
+    case 'P2023': // Not null violation
       return res.status(400).json(createErrorResponse(400, 'Missing required field', 
         'A required field is missing'));
       
-    case '23514': // Check violation
+    case 'P2021': // Check violation
       return res.status(400).json(createErrorResponse(400, 'Invalid data', 
         'The provided data does not meet the requirements'));
       

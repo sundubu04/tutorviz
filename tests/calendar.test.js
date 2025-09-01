@@ -1,4 +1,4 @@
-const ApiClient = require('../src/utils/apiClient');
+const ApiClient = require('../backend/src/utils/apiClient');
 
 const testCalendarEvent = async () => {
   const api = new ApiClient();
@@ -175,7 +175,7 @@ const testCalendarEvent = async () => {
         startTime: new Date().toISOString(),
         endTime: new Date(Date.now() + 3600000).toISOString(),
         eventType: 'other',
-        classId: '131be04e-5286-498d-b45c-70c0230e6989', // English A: Literature HL
+        classId: 'b6e572e3-4492-4794-b1d7-05c3159b0c6e', // Introduction to Computer Science
         isAllDay: false,
         createdBy: {
           firstName: 'Calendar',
@@ -225,12 +225,7 @@ const testCalendarEvent = async () => {
     // Test 9: Try to create event with valid class IDs from database
     console.log('\n9. Testing event creation with valid class IDs from database...');
     const validClassIds = [
-      '131be04e-5286-498d-b45c-70c0230e6989', // English A: Literature HL
-      'c38f9c00-d84e-41de-b2b9-4b158c753b42', // Biology SL
-      '9d2576c2-bf05-4d6a-9c6f-36843bc181a1', // Mathematics: Analysis and Approaches HL
-      'b5786e7e-d6ce-4435-a554-5e09ec405915', // Theory of Knowledge
-      '2949468a-9a1b-44e4-9e92-5278eab0c65b', // Creativity, Activity, Service
-      '35d01da1-ebad-4144-848b-214b02199079'  // Extended Essay
+      'b6e572e3-4492-4794-b1d7-05c3159b0c6e'  // Introduction to Computer Science
     ];
 
     for (const validClassId of validClassIds) {

@@ -34,7 +34,12 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "test:backend": "node tests/run-all.js",
+    "test:auth": "node tests/auth.test.js",
+    "test:api": "node tests/api.test.js",
+    "test:calendar": "node tests/calendar.test.js",
+    "test:auth-middleware": "node tests/test-authorization.js"
   },
   "eslintConfig": {
     "extends": [

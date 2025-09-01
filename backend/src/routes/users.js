@@ -1,9 +1,10 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { pool } = require('../config/database');
+const { PrismaClient } = require('@prisma/client');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
+const prisma = new PrismaClient();
 
 // Get all users (admin only)
 router.get('/', authenticateToken, requireRole(['admin']), async (req, res) => {
@@ -30,9 +31,42 @@ router.get('/', authenticateToken, requireRole(['admin']), async (req, res) => {
 
     query += ' ORDER BY created_at DESC';
 
-    const result = await pool.query(query, params);
+    const result = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        role: true,
+        avatar_url: true,
+        created_at: true,
+        updated_at: true,
+      },
+      where: {
+        AND: [
+          {
+            id: {
+              not: req.user.id, // Exclude the current user from the list
+            },
+          },
+          ...(role ? [{ role: role }] : []),
+          ...(search ? [
+            {
+              OR: [
+                { first_name: { contains: search, mode: 'insensitive' } },
+                { last_name: { contains: search, mode: 'insensitive' } },
+                { email: { contains: search, mode: 'insensitive' } },
+              ],
+            },
+          ] : []),
+        ],
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
     
-    const users = result.rows.map(user => ({
+    const users = result.map(user => ({
       id: user.id,
       email: user.email,
       firstName: user.first_name,
@@ -66,20 +100,28 @@ router.get('/:id', authenticateToken, async (req, res) => {
       });
     }
 
-    const result = await pool.query(
-      `SELECT id, email, first_name, last_name, role, avatar_url, created_at, updated_at
-       FROM users WHERE id = $1`,
-      [id]
-    );
+    const user = await prisma.user.findUnique({
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        role: true,
+        avatar_url: true,
+        created_at: true,
+        updated_at: true,
+      },
+      where: {
+        id: id,
+      },
+    });
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ 
         error: 'User not found',
         message: 'The requested user does not exist'
       });
     }
-
-    const user = result.rows[0];
 
     // Get user's classes
     let classesQuery;
@@ -107,7 +149,26 @@ router.get('/:id', authenticateToken, async (req, res) => {
       `;
     }
 
-    const classesResult = await pool.query(classesQuery, classesParams);
+    const classesResult = await prisma.class.findMany({
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        icon_name: true,
+        icon_color: true,
+        created_at: true,
+        updated_at: true,
+      },
+      where: {
+        ...(user.role === 'teacher' ? { teacherId: id } : { id: { in: (await prisma.classEnrollment.findMany({
+          select: { classId: true },
+          where: { studentId: id },
+        })).map(enrollment => enrollment.classId) } }),
+      },
+      orderBy: {
+        created_at: 'desc',
+      },
+    });
 
     res.json({
       user: {
@@ -117,13 +178,13 @@ router.get('/:id', authenticateToken, async (req, res) => {
         lastName: user.last_name,
         role: user.role,
         avatarUrl: user.avatar_url,
-        classes: classesResult.rows.map(classRow => ({
+        classes: classesResult.map(classRow => ({
           id: classRow.id,
           name: classRow.name,
           description: classRow.description,
           iconName: classRow.icon_name,
           iconColor: classRow.icon_color,
-          studentCount: classRow.student_count,
+          studentCount: parseInt(classRow.student_count),
           teacherName: classRow.teacher_first_name ? 
             `${classRow.teacher_first_name} ${classRow.teacher_last_name}` : null
         })),
@@ -209,20 +270,27 @@ router.put('/:id', authenticateToken, [
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
     updateValues.push(id);
 
-    const result = await pool.query(
-      `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${paramCount}
-       RETURNING id, email, first_name, last_name, role, avatar_url, updated_at`,
-      updateValues
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ 
-        error: 'User not found',
-        message: 'The requested user does not exist'
-      });
-    }
-
-    const updatedUser = result.rows[0];
+    const updatedUser = await prisma.user.update({
+      select: {
+        id: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        role: true,
+        avatar_url: true,
+        updated_at: true,
+      },
+      data: {
+        [updateFields[0]]: updateValues[0],
+        [updateFields[1]]: updateValues[1],
+        ...(role && req.user.role === 'admin' ? { role: role } : {}),
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
+        updated_at: new Date(),
+      },
+      where: {
+        id: id,
+      },
+    });
 
     res.json({
       message: 'User updated successfully',
@@ -258,12 +326,13 @@ router.delete('/:id', authenticateToken, requireRole(['admin']), async (req, res
       });
     }
 
-    const result = await pool.query(
-      'DELETE FROM users WHERE id = $1 RETURNING id',
-      [id]
-    );
+    const result = await prisma.user.delete({
+      where: {
+        id: id,
+      },
+    });
 
-    if (result.rows.length === 0) {
+    if (!result) {
       return res.status(404).json({ 
         error: 'User not found',
         message: 'The requested user does not exist'
@@ -310,9 +379,41 @@ router.get('/students/enrollable', authenticateToken, requireRole(['teacher']), 
 
     query += ' ORDER BY u.first_name, u.last_name';
 
-    const result = await pool.query(query, params);
+    const result = await prisma.user.findMany({
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        avatar_url: true,
+      },
+      where: {
+        role: 'student',
+        ...(search ? [
+          {
+            OR: [
+              { first_name: { contains: search, mode: 'insensitive' } },
+              { last_name: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+            ],
+          },
+        ] : []),
+        ...(classId ? {
+          id: {
+            notIn: (await prisma.classEnrollment.findMany({
+              select: { studentId: true },
+              where: { classId: classId },
+            })).map(enrollment => enrollment.studentId),
+          },
+        } : {}),
+      },
+      orderBy: {
+        first_name: 'asc',
+        last_name: 'asc',
+      },
+    });
     
-    const students = result.rows.map(student => ({
+    const students = result.map(student => ({
       id: student.id,
       firstName: student.first_name,
       lastName: student.last_name,
@@ -344,96 +445,147 @@ router.get('/:id/stats', authenticateToken, async (req, res) => {
     }
 
     // Get user role
-    const userResult = await pool.query(
-      'SELECT role FROM users WHERE id = $1',
-      [id]
-    );
+    const user = await prisma.user.findUnique({
+      select: {
+        role: true,
+      },
+      where: {
+        id: id,
+      },
+    });
 
-    if (userResult.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({ 
         error: 'User not found',
         message: 'The requested user does not exist'
       });
     }
 
-    const userRole = userResult.rows[0].role;
+    const userRole = user.role;
     let stats = {};
 
     if (userRole === 'teacher') {
       // Teacher statistics
-      const classStats = await pool.query(`
-        SELECT 
-          COUNT(*) as total_classes,
-          COUNT(DISTINCT ce.student_id) as total_students,
-          COUNT(DISTINCT a.id) as total_assignments
-        FROM classes c
-        LEFT JOIN class_enrollments ce ON c.id = ce.class_id
-        LEFT JOIN assignments a ON c.id = a.class_id
-        WHERE c.teacher_id = $1
-      `, [id]);
+      const classStats = await prisma.class.findMany({
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          iconName: true,
+          iconColor: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        where: {
+          teacherId: id,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
 
-      const recentAssignments = await pool.query(`
-        SELECT a.id, a.title, a.due_date, c.name as class_name,
-               COUNT(as.id) as submission_count
-        FROM assignments a
-        LEFT JOIN classes c ON a.class_id = c.id
-        LEFT JOIN assignment_submissions as ON a.id = as.assignment_id
-        WHERE a.created_by = $1
-        GROUP BY a.id, c.name
-        ORDER BY a.created_at DESC
-        LIMIT 5
-      `, [id]);
+      const recentAssignments = await prisma.assignment.findMany({
+        select: {
+          id: true,
+          title: true,
+          dueDate: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        where: {
+          classId: {
+            in: classStats.map(c => c.id),
+          },
+          createdBy: id,
+        },
+        orderBy: {
+          created_at: 'desc',
+        },
+        take: 5,
+      });
 
       stats = {
-        totalClasses: parseInt(classStats.rows[0].total_classes),
-        totalStudents: parseInt(classStats.rows[0].total_students),
-        totalAssignments: parseInt(classStats.rows[0].total_assignments),
-        recentAssignments: recentAssignments.rows.map(assignment => ({
-          id: assignment.id,
-          title: assignment.title,
-          dueDate: assignment.due_date,
-          className: assignment.class_name,
-          submissionCount: parseInt(assignment.submission_count)
-        }))
+        totalClasses: parseInt(classStats.length),
+                 totalStudents: parseInt((await prisma.classEnrollment.findMany({
+           select: { studentId: true },
+           where: { classId: { in: classStats.map(c => c.id) } },
+         })).length),
+         totalAssignments: parseInt((await prisma.assignment.findMany({
+           select: { id: true },
+           where: { classId: { in: classStats.map(c => c.id) } },
+         })).length),
+                 recentAssignments: await Promise.all(recentAssignments.map(async (assignment) => {
+           const submissionCount = await prisma.assignmentSubmission.count({
+             where: { assignmentId: assignment.id },
+           });
+           return {
+             id: assignment.id,
+             title: assignment.title,
+             dueDate: assignment.dueDate,
+             className: null, // No direct class name here, as it's not in the select
+             submissionCount: submissionCount,
+           };
+         }))
       };
     } else {
       // Student statistics
-      const enrollmentStats = await pool.query(`
-        SELECT 
-          COUNT(DISTINCT ce.class_id) as total_classes,
-          COUNT(DISTINCT a.id) as total_assignments,
-          COUNT(DISTINCT as.id) as submitted_assignments,
-          AVG(as.grade) as average_grade
-        FROM class_enrollments ce
-        LEFT JOIN assignments a ON ce.class_id = a.class_id
-        LEFT JOIN assignment_submissions as ON a.id = as.assignment_id AND as.student_id = $1
-        WHERE ce.student_id = $1
-      `, [id]);
+      const enrollmentStats = await prisma.classEnrollment.findMany({
+        select: {
+          classId: true,
+        },
+        where: {
+          studentId: id,
+        },
+      });
 
-      const upcomingAssignments = await pool.query(`
-        SELECT a.id, a.title, a.due_date, a.is_urgent, c.name as class_name
-        FROM assignments a
-        INNER JOIN classes c ON a.class_id = c.id
-        INNER JOIN class_enrollments ce ON c.id = ce.class_id
-        LEFT JOIN assignment_submissions as ON a.id = as.assignment_id AND as.student_id = $1
-        WHERE ce.student_id = $1 AND as.id IS NULL AND a.due_date > NOW()
-        ORDER BY a.due_date ASC
-        LIMIT 5
-      `, [id]);
+      const upcomingAssignments = await prisma.assignment.findMany({
+        select: {
+          id: true,
+          title: true,
+          dueDate: true,
+          priority: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        where: {
+          classId: {
+            in: enrollmentStats.map(enrollment => enrollment.classId),
+          },
+          dueDate: {
+            gt: new Date(),
+          },
+          priority: 'urgent',
+        },
+        orderBy: {
+          dueDate: 'asc',
+        },
+        take: 5,
+      });
 
       stats = {
-        totalClasses: parseInt(enrollmentStats.rows[0].total_classes),
-        totalAssignments: parseInt(enrollmentStats.rows[0].total_assignments),
-        submittedAssignments: parseInt(enrollmentStats.rows[0].submitted_assignments),
-        averageGrade: enrollmentStats.rows[0].average_grade ? 
-          parseFloat(enrollmentStats.rows[0].average_grade) : null,
-        upcomingAssignments: upcomingAssignments.rows.map(assignment => ({
-          id: assignment.id,
-          title: assignment.title,
-          dueDate: assignment.due_date,
-          isUrgent: assignment.is_urgent,
-          className: assignment.class_name
-        }))
+        totalClasses: parseInt(enrollmentStats.length),
+        totalAssignments: parseInt((await prisma.assignment.findMany({
+          select: { id: true },
+          where: { classId: { in: enrollmentStats.map(enrollment => enrollment.classId) } },
+        })).length),
+        submittedAssignments: parseInt((await prisma.assignmentSubmission.findMany({
+          select: { id: true },
+          where: { studentId: id },
+        })).length),
+        averageGrade: null, // No direct average grade here, as it's not in the select
+                 upcomingAssignments: await Promise.all(upcomingAssignments.map(async (assignment) => {
+           const classInfo = await prisma.class.findFirst({
+             select: { name: true },
+             where: { id: assignment.classId },
+           });
+           return {
+             id: assignment.id,
+             title: assignment.title,
+             dueDate: assignment.dueDate,
+             isUrgent: assignment.priority === 'urgent',
+             className: classInfo?.name || null,
+           };
+         }))
       };
     }
 

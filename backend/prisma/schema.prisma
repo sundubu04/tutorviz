@@ -39,14 +39,14 @@ enum TaskDifficultyLevel {
 }
 
 model User {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  firstName    String   @map("first_name") @db.VarChar(100)
-  lastName     String   @map("last_name") @db.VarChar(100)
-  role         UserRole @default(student)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  firstName    String    @map("first_name") @db.VarChar(100)
+  lastName     String    @map("last_name") @db.VarChar(100)
+  role         UserRole  @default(student)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime? @map("updated_at")
 
   // Relations
   teachingClasses    Class[]             @relation("TeacherClasses")
@@ -60,14 +60,14 @@ model User {
 }
 
 model Class {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name        String   @db.VarChar(255)
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String    @db.VarChar(255)
   description String?
-  iconName    String?  @default("book") @map("icon_name") @db.VarChar(100)
-  iconColor   String?  @default("#3B82F6") @map("icon_color") @db.VarChar(7)
-  teacherId   String   @map("teacher_id") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  iconName    String?   @default("book") @map("icon_name") @db.VarChar(100)
+  iconColor   String?   @default("#3B82F6") @map("icon_color") @db.VarChar(7)
+  teacherId   String    @map("teacher_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @map("updated_at")
 
   // Relations
   teacher     User              @relation("TeacherClasses", fields: [teacherId], references: [id], onDelete: Cascade)
@@ -103,7 +103,7 @@ model Assignment {
   topic       String?            @db.VarChar(255)
   createdBy   String             @map("created_by") @db.Uuid
   createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
+  updatedAt   DateTime?          @map("updated_at")
 
   // Relations
   class       Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
@@ -140,7 +140,7 @@ model CalendarEvent {
   classId     String?   @map("class_id") @db.Uuid
   createdBy   String    @map("created_by") @db.Uuid
   createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  updatedAt   DateTime? @map("updated_at")
 
   // Relations
   class   Class? @relation(fields: [classId], references: [id], onDelete: Cascade)
@@ -162,7 +162,7 @@ model Task {
   isActive        Boolean             @default(true) @map("is_active")
   tags            String[]
   createdAt       DateTime            @default(now()) @map("created_at")
-  updatedAt       DateTime            @updatedAt @map("updated_at")
+  updatedAt       DateTime?           @map("updated_at")
 
   // Relations
   class   Class? @relation(fields: [classId], references: [id], onDelete: Cascade)

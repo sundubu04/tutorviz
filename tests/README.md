@@ -1,6 +1,6 @@
 # TutoriAI Backend Tests
 
-This directory contains comprehensive test suites for the TutoriAI backend API.
+This directory contains comprehensive test suites for the TutoriAI backend API, located in the project root for easy access.
 
 ## 📁 Test Structure
 
@@ -10,14 +10,15 @@ tests/
 ├── run-all.js          # Test runner for all test suites
 ├── auth.test.js        # Authorization and authentication tests
 ├── api.test.js         # General API functionality tests
-└── calendar.test.js    # Calendar event management tests
+├── calendar.test.js    # Calendar event management tests
+└── test-authorization.js  # Authorization middleware tests
 ```
 
 ## 🚀 Running Tests
 
 ### Run All Tests
 ```bash
-npm run test:all
+npm run test:backend
 ```
 
 ### Run Individual Test Suites
@@ -30,6 +31,9 @@ npm run test:api
 
 # Calendar tests
 npm run test:calendar
+
+# Authorization middleware tests
+npm run test:auth-middleware
 ```
 
 ### Run Tests Directly

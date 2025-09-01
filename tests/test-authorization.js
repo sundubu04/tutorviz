@@ -3,10 +3,10 @@ const {
   requireOwnership, 
   requireClassEnrollment,
   createErrorResponse 
-} = require('./src/middleware/auth');
+} = require('../backend/src/middleware/auth');
 
 // Mock database pool for testing - completely bypass database calls
-const originalPool = require('./src/config/database').pool;
+const originalPool = require('../backend/src/config/database').pool;
 
 // Create a mock pool that returns predictable results
 const mockPool = {
@@ -36,7 +36,7 @@ const mockPool = {
 };
 
 // Temporarily replace the pool with our mock
-require('./src/config/database').pool = mockPool;
+require('../backend/src/config/database').pool = mockPool;
 
 // Mock request object with user context
 const createMockRequest = (user = null, params = {}, body = {}) => ({
@@ -370,4 +370,4 @@ console.log('- Proper error handling and responses');
 console.log('- Admin bypass capabilities where appropriate');
 
 // Restore the original pool
-require('./src/config/database').pool = originalPool;
+require('../backend/src/config/database').pool = originalPool;

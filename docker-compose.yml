@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:14-alpine
+    image: postgres:16-alpine
     container_name: tutoriai-postgres
     environment:
       POSTGRES_DB: tutoriai
@@ -12,8 +12,6 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
-      - ./backend/docker/postgres/init-security.sql:/docker-entrypoint-initdb.d/init-security.sql
     ports:
       - "5432:5432"
     healthcheck:
@@ -42,6 +40,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend/uploads:/app/uploads
+    command: sh -c "npm run db:setup && npm start"
     restart: unless-stopped
 
   # Frontend React App

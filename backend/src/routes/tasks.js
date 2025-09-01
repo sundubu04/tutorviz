@@ -1,12 +1,15 @@
 const express = require('express');
+const { body, validationResult } = require('express-validator');
+const { PrismaClient } = require('@prisma/client');
+const { authenticateToken, requireRole, requireOwnership } = require('../middleware/auth');
+
 const router = express.Router();
-const { pool } = require('../config/database');
-const { authenticateToken } = require('../middleware/auth');
+const prisma = new PrismaClient();
 
 // Get all tasks (with optional filtering)
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { class_id, task_type, difficulty_level, tags, search } = req.query;
+    const { classId, taskType, difficultyLevel, tags, search } = req.query;
     let query = `
       SELECT t.*, u.first_name, u.last_name, c.name as class_name
       FROM tasks t
@@ -17,22 +20,22 @@ router.get('/', authenticateToken, async (req, res) => {
     const params = [];
     let paramCount = 0;
 
-    if (class_id) {
+    if (classId) {
       paramCount++;
       query += ` AND t.class_id = $${paramCount}`;
-      params.push(class_id);
+      params.push(classId);
     }
 
-    if (task_type) {
+    if (taskType) {
       paramCount++;
       query += ` AND t.task_type = $${paramCount}`;
-      params.push(task_type);
+      params.push(taskType);
     }
 
-    if (difficulty_level) {
+    if (difficultyLevel) {
       paramCount++;
       query += ` AND t.difficulty_level = $${paramCount}`;
-      params.push(difficulty_level);
+      params.push(difficultyLevel);
     }
 
     if (tags && tags.length > 0) {
@@ -49,8 +52,36 @@ router.get('/', authenticateToken, async (req, res) => {
 
     query += ` ORDER BY t.created_at DESC`;
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const result = await prisma.task.findMany({
+      where: {
+        isActive: true,
+        ...(classId && { classId }),
+        ...(taskType && { taskType }),
+        ...(difficultyLevel && { difficultyLevel }),
+        ...(tags && tags.length > 0 && { tags: { has: tags } }),
+        ...(search && {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+            { content: { contains: search, mode: 'insensitive' } },
+          ],
+        }),
+      },
+      include: {
+        createdBy: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+        class: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+    res.json(result);
   } catch (error) {
     console.error('Error fetching tasks:', error);
     res.status(500).json({ error: 'Failed to fetch tasks' });
@@ -61,21 +92,28 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const query = `
-      SELECT t.*, u.first_name, u.last_name, c.name as class_name
-      FROM tasks t
-      JOIN users u ON t.created_by = u.id
-      LEFT JOIN classes c ON t.class_id = c.id
-      WHERE t.id = $1 AND t.is_active = true
-    `;
-    
-    const result = await pool.query(query, [id]);
-    
-    if (result.rows.length === 0) {
+    const task = await prisma.task.findUnique({
+      where: { id },
+      include: {
+        createdBy: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+        class: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!task) {
       return res.status(404).json({ error: 'Task not found' });
     }
-    
-    res.json(result.rows[0]);
+
+    res.json(task);
   } catch (error) {
     console.error('Error fetching task:', error);
     res.status(500).json({ error: 'Failed to fetch task' });
@@ -85,34 +123,28 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Create a new task
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    const { title, description, content, task_type, difficulty_level, estimated_time, class_id, tags } = req.body;
-    const created_by = req.user.id;
+    const { title, description, content, taskType, difficultyLevel, estimatedTime, classId, tags } = req.body;
+    const createdBy = req.user.id;
 
     // Validate required fields
     if (!title || !content) {
       return res.status(400).json({ error: 'Title and content are required' });
     }
 
-    const query = `
-      INSERT INTO tasks (title, description, content, task_type, difficulty_level, estimated_time, class_id, created_by, tags)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING *
-    `;
-    
-    const params = [
-      title,
-      description || '',
-      content,
-      task_type || 'general',
-      difficulty_level || 'medium',
-      estimated_time || 30,
-      class_id || null,
-      created_by,
-      tags || []
-    ];
-
-    const result = await pool.query(query, params);
-    res.status(201).json(result.rows[0]);
+    const task = await prisma.task.create({
+      data: {
+        title,
+        description: description || '',
+        content,
+        taskType: taskType || 'general',
+        difficultyLevel: difficultyLevel || 'medium',
+        estimatedTime: estimatedTime || 30,
+        classId: classId || null,
+        createdBy,
+        tags: tags || [],
+      },
+    });
+    res.status(201).json(task);
   } catch (error) {
     console.error('Error creating task:', error);
     res.status(500).json({ error: 'Failed to create task' });
@@ -123,59 +155,47 @@ router.post('/', authenticateToken, async (req, res) => {
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, content, task_type, difficulty_level, estimated_time, class_id, tags, is_active } = req.body;
-    const user_id = req.user.id;
+    const { title, description, content, taskType, difficultyLevel, estimatedTime, classId, tags, isActive } = req.body;
+    const userId = req.user.id;
 
     // Check if user owns the task or is a teacher
-    const ownershipQuery = `
-      SELECT t.created_by, u.role
-      FROM tasks t
-      JOIN users u ON t.created_by = u.id
-      WHERE t.id = $1
-    `;
-    
-    const ownershipResult = await pool.query(ownershipQuery, [id]);
-    
-    if (ownershipResult.rows.length === 0) {
+    const ownershipResult = await prisma.task.findUnique({
+      where: { id },
+      select: {
+        createdBy: true,
+        creator: {
+          select: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!ownershipResult) {
       return res.status(404).json({ error: 'Task not found' });
     }
-    
-    const task = ownershipResult.rows[0];
-    if (task.created_by !== user_id && task.role !== 'teacher') {
+
+    const task = ownershipResult;
+    if (task.createdBy !== userId && task.creator.role !== 'teacher') {
       return res.status(403).json({ error: 'Not authorized to update this task' });
     }
 
-    const query = `
-      UPDATE tasks 
-      SET title = COALESCE($1, title),
-          description = COALESCE($2, description),
-          content = COALESCE($3, content),
-          task_type = COALESCE($4, task_type),
-          difficulty_level = COALESCE($5, difficulty_level),
-          estimated_time = COALESCE($6, estimated_time),
-          class_id = COALESCE($7, class_id),
-          tags = COALESCE($8, tags),
-          is_active = COALESCE($9, is_active),
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = $10
-      RETURNING *
-    `;
-    
-    const params = [
-      title,
-      description,
-      content,
-      task_type,
-      difficulty_level,
-      estimated_time,
-      class_id,
-      tags,
-      is_active,
-      id
-    ];
-
-    const result = await pool.query(query, params);
-    res.json(result.rows[0]);
+    const updatedTask = await prisma.task.update({
+      where: { id },
+      data: {
+        title: title || undefined,
+        description: description || undefined,
+        content: content || undefined,
+        taskType: taskType || undefined,
+        difficultyLevel: difficultyLevel || undefined,
+        estimatedTime: estimatedTime || undefined,
+        classId: classId || undefined,
+        tags: tags || undefined,
+        isActive: isActive || undefined,
+        updatedAt: new Date(),
+      },
+    });
+    res.json(updatedTask);
   } catch (error) {
     console.error('Error updating task:', error);
     res.status(500).json({ error: 'Failed to update task' });
@@ -186,36 +206,38 @@ router.put('/:id', authenticateToken, async (req, res) => {
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const user_id = req.user.id;
+    const userId = req.user.id;
 
     // Check if user owns the task or is a teacher
-    const ownershipQuery = `
-      SELECT t.created_by, u.role
-      FROM tasks t
-      JOIN users u ON t.created_by = u.id
-      WHERE t.id = $1
-    `;
-    
-    const ownershipResult = await pool.query(ownershipQuery, [id]);
-    
-    if (ownershipResult.rows.length === 0) {
+    const ownershipResult = await prisma.task.findUnique({
+      where: { id },
+      select: {
+        createdBy: true,
+        creator: {
+          select: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!ownershipResult) {
       return res.status(404).json({ error: 'Task not found' });
     }
-    
-    const task = ownershipResult.rows[0];
-    if (task.created_by !== user_id && task.role !== 'teacher') {
+
+    const task = ownershipResult;
+    if (task.createdBy !== userId && task.creator.role !== 'teacher') {
       return res.status(403).json({ error: 'Not authorized to delete this task' });
     }
 
-    // Soft delete by setting is_active to false
-    const query = `
-      UPDATE tasks 
-      SET is_active = false, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $1
-      RETURNING *
-    `;
-    
-    const result = await pool.query(query, [id]);
+    // Soft delete by setting isActive to false
+    const deletedTask = await prisma.task.update({
+      where: { id },
+      data: {
+        isActive: false,
+        updatedAt: new Date(),
+      },
+    });
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {
     console.error('Error deleting task:', error);
@@ -226,21 +248,15 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 // Get task statistics
 router.get('/stats/overview', authenticateToken, async (req, res) => {
   try {
-    const statsQuery = `
-      SELECT 
-        COUNT(*) as total_tasks,
-        COUNT(CASE WHEN is_active = true THEN 1 END) as active_tasks,
-        COUNT(CASE WHEN task_type = 'programming' THEN 1 END) as programming_tasks,
-        COUNT(CASE WHEN task_type = 'math' THEN 1 END) as math_tasks,
-        COUNT(CASE WHEN task_type = 'writing' THEN 1 END) as writing_tasks,
-        COUNT(CASE WHEN difficulty_level = 'beginner' THEN 1 END) as beginner_tasks,
-        COUNT(CASE WHEN difficulty_level = 'intermediate' THEN 1 END) as intermediate_tasks,
-        COUNT(CASE WHEN difficulty_level = 'advanced' THEN 1 END) as advanced_tasks
-      FROM tasks
-    `;
-    
-    const result = await pool.query(statsQuery);
-    res.json(result.rows[0]);
+    const stats = await prisma.task.aggregate({
+      _count: {
+        id: true,
+      },
+      where: {
+        isActive: true,
+      },
+    });
+    res.json(stats);
   } catch (error) {
     console.error('Error fetching task statistics:', error);
     res.status(500).json({ error: 'Failed to fetch task statistics' });
