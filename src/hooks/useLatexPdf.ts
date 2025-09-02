@@ -11,7 +11,7 @@ export function useLatexPdf() {
   const compile = useCallback(async (latex: string, jobname = "main") => {
     setStatus({ state: "compiling" });
     try {
-      const res = await fetch("/api/latex/compile", {
+      const res = await fetch("http://localhost:5001/api/latex/compile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ latex, jobname }),

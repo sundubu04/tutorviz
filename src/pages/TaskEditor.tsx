@@ -4,18 +4,11 @@ import {
   ArrowLeft, 
   Undo,
   Redo,
-  Bold,
-  Italic,
-  List,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
   Bot,
-  FileText,
-  Eye,
   Code,
   X,
-  GripVertical
+  GripVertical,
+  Download
 } from 'lucide-react';
 import LatexToPdfViewer from '../components/LatexToPdfViewer';
 
@@ -24,13 +17,13 @@ const TaskEditor: React.FC = () => {
   const navigate = useNavigate();
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [isLatexViewerOpen, setIsLatexViewerOpen] = useState(true);
-  const [taskContent, setTaskContent] = useState('');
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [isAgentWorking, setIsAgentWorking] = useState(false);
   const [chatHistory, setChatHistory] = useState<{role: 'user' | 'assistant'; content: string; timestamp: Date}[]>([]);
-  const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
+
   const [latexContent, setLatexContent] = useState(`\\documentclass{article}
 \\usepackage[utf8]{inputenc}
 \\usepackage{amsmath}
@@ -55,6 +48,8 @@ Enter your task content here.
 Your main content goes here.
 
 \\end{document}`);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
 
   // Panel resizing state
   const [leftPanelWidth, setLeftPanelWidth] = useState(320);
@@ -84,6 +79,8 @@ Your main content goes here.
   const toggleLatexViewer = () => {
     setIsLatexViewerOpen(!isLatexViewerOpen);
   };
+
+
 
   // Throttled resize function for smoother performance
   const throttledResize = useCallback((resizeFunction: () => void) => {
@@ -206,10 +203,9 @@ Your main content goes here.
       try {
         setIsLoading(true);
         // TODO: Replace with actual API call when backend is reimplemented
-        setTaskContent('Task content will be loaded here when backend is ready...');
+        // For now, we'll just set loading to false since we're not using task content
       } catch (error) {
         console.error('Error loading task content:', error);
-        setTaskContent('Error loading task content');
       } finally {
         setIsLoading(false);
       }
@@ -230,6 +226,17 @@ Your main content goes here.
       alert('Failed to save task. Please try again.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDownload = () => {
+    if (pdfUrl) {
+      const link = document.createElement('a');
+      link.href = pdfUrl;
+      link.download = 'document.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -272,7 +279,7 @@ Your main content goes here.
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading task editor...</p>
@@ -282,9 +289,9 @@ Your main content goes here.
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-white shadow-sm border-b flex-shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
@@ -318,6 +325,14 @@ Your main content goes here.
                 <Redo className="h-5 w-5" />
               </button>
               <button
+                onClick={handleDownload}
+                disabled={!pdfUrl}
+                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Download PDF"
+              >
+                <Download className="h-5 w-5" />
+              </button>
+              <button
                 onClick={handleSave}
                 disabled={isSaving}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -330,43 +345,36 @@ Your main content goes here.
       </div>
 
       {/* Main Content - Three Panel Layout */}
-      <div className="flex-1 flex space-x-0">
-        {/* Left Panel - LaTeX Viewer (Toggleable) */}
+      <div className="flex-1 flex space-x-0 min-h-0">
+        {/* Left Panel - LaTeX Code Editor */}
         {isLatexViewerOpen && (
           <>
             <div 
-              className="bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-150 ease-out"
+              className="bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-150 ease-out flex flex-col"
               style={{ width: `${leftPanelWidth}px` }}
             >
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                    <Code className="h-5 w-5" />
-                    <span>LaTeX Viewer</span>
-                  </h3>
-                  <button
-                    onClick={toggleLatexViewer}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                    title="Hide LaTeX Viewer"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-                
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600">Raw LaTeX source code</p>
-                </div>
-
-                {/* LaTeX Source Code Display */}
-                <div className="border border-gray-300 rounded-lg p-3 bg-gray-50">
-                  <pre className="text-xs text-gray-800 font-mono whitespace-pre-wrap overflow-auto max-h-96">
-                    {latexContent}
-                  </pre>
-                </div>
-                
-                <div className="mt-4 text-sm text-gray-500">
-                  <p>View and edit raw LaTeX code. Changes sync with the main editor.</p>
-                </div>
+              <div className="flex items-center justify-between p-3 border-b border-gray-200">
+                <h3 className="text-sm font-medium text-gray-900 flex items-center space-x-2">
+                  <Code className="h-4 w-4" />
+                  <span>main.tex</span>
+                </h3>
+                <button
+                  onClick={toggleLatexViewer}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Hide LaTeX Editor"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              
+              {/* LaTeX Source Code Editor */}
+              <div className="flex-1">
+                <textarea
+                  value={latexContent}
+                  onChange={(e) => setLatexContent(e.target.value)}
+                  className="w-full h-full p-3 text-sm text-gray-800 font-mono resize-none border-0 bg-transparent focus:outline-none"
+                  placeholder="Enter your LaTeX code here..."
+                />
               </div>
             </div>
             
@@ -382,125 +390,9 @@ Your main content goes here.
           </>
         )}
 
-        {/* Center Panel - Task Editor (Main editing area, dynamically resizes) */}
-        <div className={`flex-1 bg-white transition-all duration-150 ease-out ${isChatOpen ? 'min-w-0' : 'w-full'}`}>
-          <div className="p-4">
-            {/* Tab Navigation */}
-            <div className="flex items-center space-x-1 mb-4 border-b border-gray-200">
-              <button
-                onClick={() => setActiveTab('editor')}
-                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                  activeTab === 'editor'
-                    ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-700'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <FileText className="h-4 w-4" />
-                  <span>Editor</span>
-                </div>
-              </button>
-              <button
-                onClick={() => setActiveTab('preview')}
-                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                  activeTab === 'preview'
-                    ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-700'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <Eye className="h-4 w-4" />
-                  <span>PDF Preview</span>
-                </div>
-              </button>
-            </div>
-
-            {/* Tab Content */}
-            {activeTab === 'editor' && (
-              <>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">Task Editor</h2>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={handleButtonClick.bind(null, 'Bold')}
-                      className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Bold"
-                    >
-                      <Bold className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={handleButtonClick.bind(null, 'Italic')}
-                      className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Italic"
-                    >
-                      <Italic className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={handleButtonClick.bind(null, 'List')}
-                      className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="List"
-                    >
-                      <List className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={handleButtonClick.bind(null, 'Align Left')}
-                      className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Align Left"
-                    >
-                      <AlignLeft className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={handleButtonClick.bind(null, 'Align Center')}
-                      className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Align Center"
-                    >
-                      <AlignCenter className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={handleButtonClick.bind(null, 'Align Right')}
-                      className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Align Right"
-                    >
-                      <AlignRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-                
-                <textarea
-                  value={taskContent}
-                  onChange={(e) => setTaskContent(e.target.value)}
-                  className="w-full h-[calc(100vh-280px)] p-4 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
-                  placeholder="Enter your task content here..."
-                />
-                
-                <div className="mt-4 text-sm text-gray-500">
-                  <p>Edit your task content above. Switch to PDF Preview to see the compiled result.</p>
-                </div>
-              </>
-            )}
-
-            {activeTab === 'preview' && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">PDF Preview</h2>
-                  <button
-                    onClick={() => setActiveTab('editor')}
-                    className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
-                  >
-                    Edit Task
-                  </button>
-                </div>
-                
-                <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 h-[calc(100vh-280px)] overflow-auto">
-                  <LatexToPdfViewer latex={latexContent} />
-                </div>
-                
-                <div className="mt-4 text-sm text-gray-500">
-                  <p>PDF is automatically compiled from your LaTeX content. Make changes in the Editor tab and return here to see updates.</p>
-                </div>
-              </div>
-            )}
-          </div>
+        {/* Center Panel - PDF Viewer */}
+        <div className={`flex-1 bg-white transition-all duration-150 ease-out min-h-0 ${isChatOpen ? 'min-w-0' : 'w-full'}`}>
+          <LatexToPdfViewer latex={latexContent} className="h-full" onPdfUrlChange={setPdfUrl} />
         </div>
 
         {/* Right Panel - Chat Sidebar (Fixed width, always visible) */}
@@ -600,7 +492,7 @@ Your main content goes here.
         <button
           onClick={toggleLatexViewer}
           className="fixed left-6 bottom-6 p-4 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-colors"
-          title="Open LaTeX Viewer"
+          title="Open LaTeX Editor"
         >
           <Code className="h-6 w-6" />
         </button>

@@ -1,0 +1,35 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install system dependencies and Tectonic
+RUN apk add --no-cache \
+    curl \
+    ca-certificates \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Tectonic for LaTeX compilation
+RUN wget -O tectonic.tar.gz https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic@0.14.1/tectonic-0.14.1-x86_64-unknown-linux-musl.tar.gz \
+    && tar -xzf tectonic.tar.gz \
+    && find . -name "tectonic" -type f -executable -exec mv {} /usr/local/bin/ \; \
+    && chmod +x /usr/local/bin/tectonic \
+    && rm -rf tectonic.tar.gz tectonic-*
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies including dev dependencies
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Create uploads directory
+RUN mkdir -p uploads
+
+# Expose port 5001
+EXPOSE 5001
+
+# Use nodemon for hot reloading in development
+CMD ["npm", "run", "dev"]
