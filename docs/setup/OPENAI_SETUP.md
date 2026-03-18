@@ -13,9 +13,9 @@
    REACT_APP_OPENAI_API_KEY=sk-your-actual-key-here
    ```
 
-3. **Restart the development server:**
-   - Stop the current server (Ctrl+C)
-   - Run `./start.sh` again
+3. **Restart the development environment:**
+   - Stop the current containers (if running): `make down`
+   - Start them again: `make up`
 
 ## Test the Chat Feature
 
