@@ -1,68 +1,71 @@
-version: '3.8'
-
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:16-alpine
-    container_name: tutoriai-postgres
-    environment:
-      POSTGRES_DB: tutoriai
-      POSTGRES_USER: tutoriai_user
-      POSTGRES_PASSWORD: tutoriai_password
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tutoriai_user -d tutoriai"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  # Backend API
+  # Backend API (Development)
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
-    container_name: tutoriai-backend
+      dockerfile: Dockerfile.dev
+    container_name: tutoriai-backend-dev
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: 5001
-      DATABASE_URL: postgresql://tutoriai_user:tutoriai_password@postgres:5432/tutoriai
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+     
+      # Database connection
+      # When running inside Docker, `127.0.0.1` points to the container itself.
+      # Use `host.docker.internal` to reach Supabase running on the host.
+      DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:54322/postgres
+      DIRECT_URL: postgresql://postgres:postgres@host.docker.internal:54322/postgres
+      
+      # Supabase Auth
+      SUPABASE_URL: http://host.docker.internal:54321
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
-      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+
       CORS_ORIGIN: http://localhost:3000
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # File watching optimizations
+      CHOKIDAR_USEPOLLING: true
+      WATCHPACK_POLLING: true
     ports:
       - "5001:5001"
-    depends_on:
-      postgres:
-        condition: service_healthy
     volumes:
+      - ./backend:/app
+      - /app/node_modules
       - ./backend/uploads:/app/uploads
-    command: sh -c "npm run db:setup && npm start"
+      # Exclude node_modules from volume to prevent conflicts
+      - /app/backend/node_modules
+    command: sh -c "npm run db:setup && npm run dev"
     restart: unless-stopped
+    # Enable file watching with polling for better cross-platform support
+    stdin_open: true
+    tty: true
 
-  # Frontend React App
+  # Frontend React App (Development)
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: tutoriai-frontend
+      dockerfile: Dockerfile.dev
+    container_name: tutoriai-frontend-dev
+    environment:
+      # File watching optimizations for React
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=1000
+      - WATCHPACK_POLLING=true
+      - FAST_REFRESH=true
+      - REACT_APP_API_URL=http://localhost:5001
     ports:
-      - "3000:80"
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/frontend/node_modules
+      # Exclude backend from frontend volume to prevent conflicts
+      - /app/backend
     depends_on:
       - backend
     restart: unless-stopped
-
-volumes:
-  postgres_data:
-    driver: local
+    # Enable file watching with polling for better cross-platform support
+    stdin_open: true
+    tty: true
 
 networks:
   default:
-    name: tutoriai-network 
+    name: tutoriai-dev-network
