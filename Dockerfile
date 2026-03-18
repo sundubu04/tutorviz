@@ -1,28 +1,25 @@
 # Build stage
 FROM node:20-alpine AS build
 
-WORKDIR /app
+WORKDIR /app/frontend
 
 # Copy package files
-COPY package*.json ./
-
-# Debug: List files to verify package-lock.json is copied
-RUN ls -la
+COPY frontend/package*.json ./
 
 # Install dependencies (using npm install instead of npm ci for better compatibility)
 RUN npm install --production=false
 
 # Copy source code
-COPY . .
+COPY frontend/ ./
 
 # Build the app
-RUN npm run build
+RUN CI=false npm run build
 
 # Production stage
 FROM nginx:alpine
 
 # Copy built app to nginx
-COPY --from=build /app/build /usr/share/nginx/html
+COPY --from=build /app/frontend/build /usr/share/nginx/html
 
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf

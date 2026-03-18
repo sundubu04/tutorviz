@@ -24,8 +24,10 @@ sleep 3
 
 # Start frontend server in background
 echo -e "${BLUE}[INFO]${NC} Starting frontend server..."
+cd frontend
 npm start &
 FRONTEND_PID=$!
+cd ..
 
 echo ""
 echo -e "${GREEN}✅ Both servers are starting up!${NC}"

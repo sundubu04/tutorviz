@@ -94,7 +94,7 @@ volumes:
 ### 1. Making Changes
 
 **Frontend Changes:**
-- Edit files in `src/` directory
+- Edit files in `frontend/src/` directory
 - Changes are automatically detected
 - Browser refreshes automatically
 - React components update without losing state (Fast Refresh)

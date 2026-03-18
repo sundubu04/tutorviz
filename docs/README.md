@@ -59,4 +59,4 @@ When adding new documentation:
 
 - [Main Project README](../README.md) - Project overview and getting started
 - [Backend Documentation](../backend/README.md) - Backend-specific documentation
-- [Frontend Source](../src/) - Frontend source code and components
+- [Frontend Source](../frontend/) - Frontend source code and components

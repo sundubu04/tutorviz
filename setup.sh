@@ -73,7 +73,7 @@ print_success "Backend setup completed!"
 
 # Setup frontend
 print_status "Setting up frontend..."
-cd ..
+cd ../frontend
 
 # Install frontend dependencies
 print_status "Installing frontend dependencies..."
@@ -89,7 +89,7 @@ echo "1. Start the backend server:"
 echo "   cd backend && npm run dev"
 echo ""
 echo "2. Start the frontend server (in a new terminal):"
-echo "   npm start"
+echo "   cd frontend && npm start"
 echo ""
 echo "🌐 The application will be available at:"
 echo "   Frontend: http://localhost:3000"
