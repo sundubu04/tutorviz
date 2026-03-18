@@ -29,6 +29,9 @@ services:
       NODE_ENV: development
       PORT: 5001
       DATABASE_URL: postgresql://tutoriai_user:tutoriai_password@postgres:5432/tutoriai_dev
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
       JWT_SECRET: dev-jwt-secret-key
       CORS_ORIGIN: http://localhost:3000
       OPENAI_API_KEY: ${OPENAI_API_KEY}
