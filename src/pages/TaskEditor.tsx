@@ -24,6 +24,7 @@ const TaskEditor: React.FC = () => {
   const [isAgentWorking, setIsAgentWorking] = useState(false);
   const [chatHistory, setChatHistory] = useState<{role: 'user' | 'assistant'; content: string; timestamp: Date}[]>([]);
   const [aiProposal, setAiProposal] = useState<{ assistantMessage: string; updatedLatex: string } | null>(null);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const [latexContent, setLatexContent] = useState(`\\documentclass{article}
 \\usepackage[utf8]{inputenc}
@@ -126,6 +127,11 @@ Your main content goes here.
 
     loadTaskContent();
   }, [taskId]);
+
+  // Auto-scroll chat thread to the newest message.
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [chatHistory, isAgentWorking]);
 
   const saveLatex = async (contentOverride?: string) => {
     if (!taskId) return;
@@ -441,6 +447,8 @@ Your main content goes here.
                     </div>
                   </div>
                 )}
+
+                <div ref={chatEndRef} />
               </div>
 
               {/* AI confirmation (Apply/Cancel) */}
