@@ -68,7 +68,7 @@ router.get('/', authenticateToken, async (req, res) => {
         }),
       },
       include: {
-        createdBy: {
+        creator: {
           select: {
             firstName: true,
             lastName: true,
@@ -92,10 +92,19 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Prisma expects UUIDs for the `id` field; handle non-UUID ids (e.g. demo-task) gracefully.
+    const isUuid =
+      typeof id === 'string' &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+    if (!isUuid) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
     const task = await prisma.task.findUnique({
       where: { id },
       include: {
-        createdBy: {
+        creator: {
           select: {
             firstName: true,
             lastName: true,

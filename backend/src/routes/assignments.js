@@ -15,10 +15,10 @@ router.get('/test', async (req, res) => {
         id: true,
         title: true,
         description: true,
-        due_date: true,
+        dueDate: true,
         priority: true,
         topic: true,
-        created_at: true,
+        createdAt: true,
         class: {
           select: {
             id: true,
@@ -63,7 +63,7 @@ router.get('/test', async (req, res) => {
           dueDate: true,
           priority: true,
           topic: true,
-          created_at: true,
+          createdAt: true,
           class: {
             select: {
               id: true,
@@ -241,10 +241,10 @@ router.get('/', authenticateToken, async (req, res) => {
         id: true,
         title: true,
         description: true,
-        due_date: true,
+        dueDate: true,
         priority: true,
         topic: true,
-        created_at: true,
+        createdAt: true,
         class: {
           select: {
             id: true,

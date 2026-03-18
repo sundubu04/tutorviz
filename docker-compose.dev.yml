@@ -31,6 +31,7 @@ services:
       DATABASE_URL: postgresql://tutoriai_user:tutoriai_password@postgres:5432/tutoriai_dev
       JWT_SECRET: dev-jwt-secret-key
       CORS_ORIGIN: http://localhost:3000
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       # File watching optimizations
       CHOKIDAR_USEPOLLING: true
       WATCHPACK_POLLING: true

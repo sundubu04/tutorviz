@@ -7,10 +7,10 @@ import {
   Bot,
   Code,
   X,
-  GripVertical,
   Download
 } from 'lucide-react';
 import LatexToPdfViewer from '../components/LatexToPdfViewer';
+import ResizablePanel from '../components/resizable/ResizablePanel';
 
 const TaskEditor: React.FC = () => {
   const { taskId } = useParams<{ taskId: string }>();
@@ -23,6 +23,7 @@ const TaskEditor: React.FC = () => {
   const [chatMessage, setChatMessage] = useState('');
   const [isAgentWorking, setIsAgentWorking] = useState(false);
   const [chatHistory, setChatHistory] = useState<{role: 'user' | 'assistant'; content: string; timestamp: Date}[]>([]);
+  const [aiProposal, setAiProposal] = useState<{ assistantMessage: string; updatedLatex: string } | null>(null);
 
   const [latexContent, setLatexContent] = useState(`\\documentclass{article}
 \\usepackage[utf8]{inputenc}
@@ -50,19 +51,17 @@ Your main content goes here.
 \\end{document}`);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
 
+  const isUuid = (value: unknown): value is string => {
+    if (typeof value !== 'string') return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value
+    );
+  };
 
-  // Panel resizing state
-  const [leftPanelWidth, setLeftPanelWidth] = useState(320);
-  const [rightPanelWidth, setRightPanelWidth] = useState(320);
-  const [isDraggingLeft, setIsDraggingLeft] = useState(false);
-  const [isDraggingRight, setIsDraggingRight] = useState(false);
-  
-  // Refs for drag functionality
-  const leftResizerRef = useRef<HTMLDivElement>(null);
-  const rightResizerRef = useRef<HTMLDivElement>(null);
-  
-  // Throttle resize updates for smoother performance
-  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Panel resizing state - Better proportions like Overleaf
+  const [leftPanelWidth, setLeftPanelWidth] = useState(400);
+  const [rightPanelWidth, setRightPanelWidth] = useState(300);
 
   const handleBackToTasks = () => {
     navigate('/tasks');
@@ -80,131 +79,45 @@ Your main content goes here.
     setIsLatexViewerOpen(!isLatexViewerOpen);
   };
 
-
-
-  // Throttled resize function for smoother performance
-  const throttledResize = useCallback((resizeFunction: () => void) => {
-    if (resizeTimeoutRef.current) {
-      clearTimeout(resizeTimeoutRef.current);
-    }
-    
-    resizeTimeoutRef.current = setTimeout(() => {
-      resizeFunction();
-    }, 16); // ~60fps
-  }, []);
-
-  // Mouse event handlers for left panel resizing
-  const handleLeftMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDraggingLeft(true);
-  }, []);
-
-  const handleLeftMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDraggingLeft) return;
-    
-    const newWidth = e.clientX;
-    const minWidth = 200;
-    const maxWidth = window.innerWidth * 0.4; // Max 40% of screen width
-    
-    if (newWidth >= minWidth && newWidth <= maxWidth) {
-      // Use throttled resize for smoother performance
-      throttledResize(() => {
-        setLeftPanelWidth(newWidth);
-      });
-    }
-  }, [isDraggingLeft, throttledResize]);
-
-  const handleLeftMouseUp = useCallback(() => {
-    setIsDraggingLeft(false);
-    // Clear any pending resize updates
-    if (resizeTimeoutRef.current) {
-      clearTimeout(resizeTimeoutRef.current);
-      resizeTimeoutRef.current = null;
-    }
-  }, []);
-
-  // Mouse event handlers for right panel resizing
-  const handleRightMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDraggingRight(true);
-  }, []);
-
-  const handleRightMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDraggingRight) return;
-    
-    const newWidth = window.innerWidth - e.clientX;
-    const minWidth = 200;
-    const maxWidth = window.innerWidth * 0.4; // Max 40% of screen width
-    
-    if (newWidth >= minWidth && newWidth <= maxWidth) {
-      // Use throttled resize for smoother performance
-      throttledResize(() => {
-        setRightPanelWidth(newWidth);
-      });
-    }
-  }, [isDraggingRight, throttledResize]);
-
-  const handleRightMouseUp = useCallback(() => {
-    setIsDraggingRight(false);
-    // Clear any pending resize updates
-    if (resizeTimeoutRef.current) {
-      clearTimeout(resizeTimeoutRef.current);
-      resizeTimeoutRef.current = null;
-    }
-  }, []);
-
-  // Add/remove global mouse event listeners
-  useEffect(() => {
-    if (isDraggingLeft) {
-      document.addEventListener('mousemove', handleLeftMouseMove);
-      document.addEventListener('mouseup', handleLeftMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleLeftMouseMove);
-      document.removeEventListener('mouseup', handleLeftMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isDraggingLeft, handleLeftMouseMove, handleLeftMouseUp]);
-
-  useEffect(() => {
-    if (isDraggingRight) {
-      document.addEventListener('mousemove', handleRightMouseMove);
-      document.addEventListener('mouseup', handleRightMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleRightMouseMove);
-      document.removeEventListener('mouseup', handleRightMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isDraggingRight, handleRightMouseMove, handleRightMouseUp]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current);
-      }
-    };
-  }, []);
-
   // Load task content on component mount
   useEffect(() => {
     const loadTaskContent = async () => {
       if (!taskId) return;
+
+      // Backend expects UUIDs for `Task.id`. For demo/non-UUID ids,
+      // keep the local editor LaTeX and avoid the failing API call.
+      if (!isUuid(taskId)) {
+        setIsLoading(false);
+        return;
+      }
       
       try {
         setIsLoading(true);
-        // TODO: Replace with actual API call when backend is reimplemented
-        // For now, we'll just set loading to false since we're not using task content
+        const token = localStorage.getItem('authToken');
+
+        const res = await fetch(`http://localhost:5001/api/tasks/${taskId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+
+        if (!res.ok) {
+          // For demo/non-UUID ids (e.g. "demo-task"), we keep the editor's default LaTeX.
+          if (res.status === 404 || res.status === 400) {
+            return;
+          }
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (typeof data?.content === 'string' && data.content.trim()) {
+          setLatexContent(data.content);
+        }
       } catch (error) {
+        // Avoid noisy console errors for benign cases.
+        // Non-UUID ids will be handled by the `res.status === 404/400` early return above.
         console.error('Error loading task content:', error);
       } finally {
         setIsLoading(false);
@@ -214,19 +127,40 @@ Your main content goes here.
     loadTaskContent();
   }, [taskId]);
 
-  const handleSave = async () => {
+  const saveLatex = async (contentOverride?: string) => {
     if (!taskId) return;
-    
+    if (!isUuid(taskId)) {
+      // Non-UUID ids are "demo" / client-only until we add a create-task flow.
+      return;
+    }
+
     try {
       setIsSaving(true);
-      // TODO: Replace with actual API call when backend is reimplemented
-      alert('Save functionality will be implemented when backend is ready');
+      const token = localStorage.getItem('authToken');
+      const nextContent = typeof contentOverride === 'string' ? contentOverride : latexContent;
+
+      const res = await fetch(`http://localhost:5001/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ content: nextContent }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
     } catch (error) {
       console.error('Error saving task:', error);
       alert('Failed to save task. Please try again.');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleSave = async () => {
+    await saveLatex();
   };
 
   const handleDownload = () => {
@@ -257,24 +191,76 @@ Your main content goes here.
 
     try {
       setIsAgentWorking(true);
-      // TODO: Replace with actual AI API call when backend is reimplemented
-      const aiResponse = {
-        role: 'assistant' as const,
-        content: 'AI assistance will be available when the backend is reimplemented. For now, you can edit the task content directly.',
-        timestamp: new Date()
-      };
-      setChatHistory(prev => [...prev, aiResponse]);
+      const token = localStorage.getItem('authToken');
+      const history = [
+        ...chatHistory.slice(-9).map((m) => ({ role: m.role, content: m.content })),
+        { role: 'user' as const, content: userMessage },
+      ];
+
+      const res = await fetch(`http://localhost:5001/api/tasks/${taskId}/ai/latex-edit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          latexContent,
+          history,
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} ${errText}`);
+      }
+
+      const data = await res.json();
+
+      const assistantMessage = typeof data?.assistantMessage === 'string' ? data.assistantMessage : '';
+      const updatedLatex = typeof data?.updatedLatex === 'string' ? data.updatedLatex : latexContent;
+
+      setAiProposal({
+        assistantMessage,
+        updatedLatex,
+      });
+
+      setChatHistory(prev => [
+        ...prev,
+        {
+          role: 'assistant' as const,
+          content: assistantMessage || 'AI generated an updated LaTeX document.',
+          timestamp: new Date(),
+        },
+      ]);
     } catch (error) {
       console.error('Error getting AI response:', error);
-      const errorResponse = {
-        role: 'assistant' as const,
-        content: 'Sorry, I encountered an error. Please try again later.',
-        timestamp: new Date()
-      };
-      setChatHistory(prev => [...prev, errorResponse]);
+      setAiProposal(null);
+      setChatHistory(prev => [
+        ...prev,
+        {
+          role: 'assistant' as const,
+          content: 'Sorry, I encountered an error. Please try again later.',
+          timestamp: new Date(),
+        },
+      ]);
     } finally {
       setIsAgentWorking(false);
     }
+  };
+
+  const handleApplyAiProposal = async () => {
+    if (!aiProposal || !taskId) return;
+    const nextLatex = aiProposal.updatedLatex;
+    setAiProposal(null);
+    setLatexContent(nextLatex);
+    if (isUuid(taskId)) {
+      await saveLatex(nextLatex);
+    }
+  };
+
+  const handleCancelAiProposal = () => {
+    setAiProposal(null);
   };
 
   if (isLoading) {
@@ -289,11 +275,11 @@ Your main content goes here.
   }
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="bg-white shadow-sm border-b flex-shrink-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14">
             <div className="flex items-center space-x-4">
               <button
                 onClick={handleBackToTasks}
@@ -345,145 +331,167 @@ Your main content goes here.
       </div>
 
       {/* Main Content - Three Panel Layout */}
-      <div className="flex-1 flex space-x-0 min-h-0">
+      <div className="flex-1 flex min-h-0 bg-white">
         {/* Left Panel - LaTeX Code Editor */}
         {isLatexViewerOpen && (
-          <>
-            <div 
-              className="bg-white border-r border-gray-200 flex-shrink-0 transition-all duration-150 ease-out flex flex-col"
-              style={{ width: `${leftPanelWidth}px` }}
-            >
-              <div className="flex items-center justify-between p-3 border-b border-gray-200">
-                <h3 className="text-sm font-medium text-gray-900 flex items-center space-x-2">
-                  <Code className="h-4 w-4" />
-                  <span>main.tex</span>
-                </h3>
-                <button
-                  onClick={toggleLatexViewer}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                  title="Hide LaTeX Editor"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              
-              {/* LaTeX Source Code Editor */}
-              <div className="flex-1">
-                <textarea
-                  value={latexContent}
-                  onChange={(e) => setLatexContent(e.target.value)}
-                  className="w-full h-full p-3 text-sm text-gray-800 font-mono resize-none border-0 bg-transparent focus:outline-none"
-                  placeholder="Enter your LaTeX code here..."
-                />
-              </div>
+          <ResizablePanel
+            side="left"
+            initialWidth={leftPanelWidth}
+            minWidth={250}
+            maxWidth={window.innerWidth * 0.5}
+            onWidthChange={setLeftPanelWidth}
+            borderSide="right"
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-sm font-medium text-gray-900 flex items-center space-x-2">
+                <Code className="h-4 w-4" />
+                <span>main.tex</span>
+              </h3>
+              <button
+                onClick={toggleLatexViewer}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-200"
+                title="Hide LaTeX Editor"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
             
-            {/* Left Panel Resizer */}
-            <div
-              ref={leftResizerRef}
-              className="w-1 bg-gray-300 hover:bg-blue-500 cursor-col-resize flex items-center justify-center group transition-colors duration-150"
-              onMouseDown={handleLeftMouseDown}
-              title="Drag to resize left panel"
-            >
-              <GripVertical className="h-6 w-4 text-gray-400 group-hover:text-blue-500 transition-colors duration-150" />
+            {/* LaTeX Source Code Editor */}
+            <div className="flex-1 relative">
+              <textarea
+                value={latexContent}
+                onChange={(e) => setLatexContent(e.target.value)}
+                className="w-full h-full p-4 text-sm text-gray-800 font-mono resize-none border-0 bg-transparent focus:outline-none leading-relaxed"
+                placeholder="Enter your LaTeX code here..."
+                style={{ lineHeight: '1.6' }}
+              />
             </div>
-          </>
+          </ResizablePanel>
         )}
 
         {/* Center Panel - PDF Viewer */}
-        <div className={`flex-1 bg-white transition-all duration-150 ease-out min-h-0 ${isChatOpen ? 'min-w-0' : 'w-full'}`}>
-          <LatexToPdfViewer latex={latexContent} className="h-full" onPdfUrlChange={setPdfUrl} />
+        <div className={`flex-1 bg-gray-50 transition-all duration-150 ease-out min-h-0 ${isChatOpen ? 'min-w-0' : 'w-full'}`}>
+          <div className="h-full flex flex-col">
+
+            <div className="flex-1 overflow-hidden">
+              <LatexToPdfViewer latex={latexContent} className="h-full" onPdfUrlChange={setPdfUrl} />
+            </div>
+          </div>
         </div>
 
         {/* Right Panel - Chat Sidebar (Fixed width, always visible) */}
         {isChatOpen && (
-          <>
-            {/* Right Panel Resizer */}
-            <div
-              ref={rightResizerRef}
-              className="w-1 bg-gray-300 hover:bg-blue-500 cursor-col-resize flex items-center justify-center group transition-colors duration-150"
-              onMouseDown={handleRightMouseDown}
-              title="Drag to resize right panel"
-            >
-              <GripVertical className="h-6 w-4 text-gray-400 group-hover:text-blue-500 transition-colors duration-150" />
+          <ResizablePanel
+            side="right"
+            initialWidth={rightPanelWidth}
+            minWidth={200}
+            maxWidth={window.innerWidth * 0.35}
+            onWidthChange={setRightPanelWidth}
+            borderSide="left"
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-sm font-medium text-gray-900 flex items-center space-x-2">
+                <Bot className="h-4 w-4" />
+                <span>AI Assistant</span>
+              </h3>
+              <button
+                onClick={toggleChat}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-200"
+                title="Hide Chat"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
             
-            <div 
-              className="bg-white border-l border-gray-200 flex-shrink-0 transition-all duration-150 ease-out"
-              style={{ width: `${rightPanelWidth}px` }}
-            >
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">AI Assistant</h3>
-                  <button
-                    onClick={toggleChat}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                    title="Hide Chat"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-                
-                <div className="mb-4">
-                  <p className="text-sm text-gray-600">Ask me to help with your task</p>
-                  <p className="text-xs mt-2">AI assistance will be available when backend is ready</p>
-                </div>
-
-                {/* Chat History */}
-                <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
-                  {chatHistory.map((message, index) => (
-                    <div
-                      key={index}
-                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div
-                        className={`max-w-xs px-3 py-2 rounded-lg ${
-                          message.role === 'user'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-900'
-                        }`}
-                      >
-                        <p className="text-sm">{message.content}</p>
-                        <p className="text-xs mt-1 opacity-70">
-                          {message.timestamp.toLocaleTimeString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {isAgentWorking && (
-                    <div className="flex justify-start">
-                      <div className="bg-gray-100 text-gray-900 px-3 py-2 rounded-lg">
-                        <div className="flex items-center space-x-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                          <span className="text-sm">AI is thinking...</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Chat Input */}
-                <form onSubmit={handleChatSubmit} className="space-y-3">
-                  <textarea
-                    value={chatMessage}
-                    onChange={(e) => setChatMessage(e.target.value)}
-                    placeholder="Ask me to help with your task..."
-                    className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    rows={3}
-                  />
-                  <button
-                    type="submit"
-                    disabled={!chatMessage.trim() || isAgentWorking}
-                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
-                  >
-                    <Bot className="h-4 w-4" />
-                    <span>Send Message</span>
-                  </button>
-                </form>
+            <div className="flex-1 flex flex-col p-4">
+              <div className="mb-4">
+                <p className="text-sm text-gray-600">Ask me to help with your task</p>
+                <p className="text-xs mt-1 text-gray-500">Ask for LaTeX edits; confirm before applying changes</p>
               </div>
+
+              {/* Chat History */}
+              <div className="flex-1 space-y-2 mb-4 overflow-y-auto">
+                {chatHistory.map((message, index) => (
+                  <div
+                    key={index}
+                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[85%] px-3 py-2 rounded-lg ${
+                        message.role === 'user'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-900'
+                      }`}
+                    >
+                      <p className="text-sm">{message.content}</p>
+                      <p className="text-xs mt-1 opacity-70">
+                        {message.timestamp.toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                
+                {isAgentWorking && (
+                  <div className="flex justify-start">
+                    <div className="bg-gray-100 text-gray-900 px-3 py-2 rounded-lg">
+                      <div className="flex items-center space-x-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                        <span className="text-sm">AI is thinking...</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* AI confirmation (Apply/Cancel) */}
+              {aiProposal && (
+                <div className="mb-4 p-3 border border-yellow-200 bg-yellow-50 rounded-lg">
+                  <p className="text-xs font-medium text-yellow-900">AI proposed an update</p>
+                  <p className="text-sm text-yellow-900 mt-1 font-medium">Confirmation required</p>
+                  <p className="text-xs text-yellow-900 mt-2 whitespace-pre-wrap opacity-90">
+                    {aiProposal.assistantMessage}
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={handleApplyAiProposal}
+                      disabled={isAgentWorking || isSaving}
+                      className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                    >
+                      Apply updated LaTeX
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelAiProposal}
+                      disabled={isAgentWorking || isSaving}
+                      className="flex-1 px-3 py-2 bg-white text-gray-900 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Chat Input */}
+              <form onSubmit={handleChatSubmit} className="space-y-2">
+                <textarea
+                  value={chatMessage}
+                  onChange={(e) => setChatMessage(e.target.value)}
+                  placeholder="Ask me to help with your task..."
+                  className="w-full p-2 text-sm border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  rows={2}
+                />
+                <button
+                  type="submit"
+                  disabled={!chatMessage.trim() || isAgentWorking}
+                  className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2 text-sm"
+                >
+                  <Bot className="h-4 w-4" />
+                  <span>Send</span>
+                </button>
+              </form>
             </div>
-          </>
+          </ResizablePanel>
         )}
       </div>
 

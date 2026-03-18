@@ -8,17 +8,19 @@ require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 const { PrismaClient } = require('@prisma/client');
 
 // Import routes
-const authRoutes = require('./routes/auth');
-const classRoutes = require('./routes/classes');
-const assignmentRoutes = require('./routes/assignments');
-const userRoutes = require('./routes/users');
-const calendarRoutes = require('./routes/calendar');
-const latexRoutes = require('./routes/latex.js');
-const taskRoutes = require('./routes/tasks');
+const authRoutes = require('./api/routes/auth');
+const classRoutes = require('./api/routes/classes');
+const assignmentRoutes = require('./api/routes/assignments');
+const userRoutes = require('./api/routes/users');
+const calendarRoutes = require('./api/routes/calendar');
+const latexRoutes = require('./api/routes/latex');
+const taskRoutes = require('./api/routes/tasks');
+const taskAiRoutes = require('./api/routes/taskAi');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 const prisma = new PrismaClient();
+let isDbConnected = false;
 
 // Security middleware
 app.use(helmet());
@@ -67,6 +69,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/latex', latexRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api', taskAiRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -93,23 +96,35 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
-const startServer = async () => {
-  try {
-    // Test Prisma connection
-    await prisma.$connect();
-    console.log('✅ Database connection successful');
-    
-    app.listen(PORT, () => {
-      console.log(`🚀 TutoriAI Backend server running on port ${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    await prisma.$disconnect();
-    process.exit(1);
-  }
+// Start server (listen immediately; connect to DB with retries)
+const startServer = () => {
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 TutoriAI Backend server running on port ${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+
+  // Increase socket timeout to accommodate slow OpenAI requests.
+  // Default Node timeout is often ~2 minutes; if the model takes longer,
+  // the client can see `ERR_CONNECTION_RESET`.
+  server.timeout = 5 * 60 * 1000; // 5 minutes
+  server.headersTimeout = 5 * 60 * 1000;
+
+  const connectWithRetry = async () => {
+    // Retry forever in dev so the container doesn't crash-restart
+    while (!isDbConnected) {
+      try {
+        await prisma.$connect();
+        isDbConnected = true;
+        console.log('✅ Database connection successful');
+      } catch (error) {
+        console.error('❌ Failed to connect to database. Retrying in 5s...', error);
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
+    }
+  };
+
+  connectWithRetry();
 };
 
 // Graceful shutdown

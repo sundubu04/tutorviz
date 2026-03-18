@@ -22,11 +22,13 @@ export default function LatexToPdfViewer({ latex, className = "", onPdfUrlChange
         timeoutId = setTimeout(async () => {
           if (latexContent.trim() && latexContent !== lastCompiledLatex) {
             try {
+              console.log("Debounced compilation starting for:", latexContent.substring(0, 100) + "...");
               const u = await compile(latexContent, "main");
               setUrl(u);
               setLastCompiledLatex(latexContent);
+              console.log("Debounced compilation successful");
             } catch (error) {
-              console.error("LaTeX compilation error:", error);
+              console.error("LaTeX compilation error in debounced compile:", error);
             }
           }
         }, 1000); // 1 second debounce
