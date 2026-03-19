@@ -54,6 +54,8 @@ Your main content goes here.
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState<string>('');
   const [compileTrigger, setCompileTrigger] = useState<number | null>(null);
+  const [hasLoadedTask, setHasLoadedTask] = useState(false);
+  const hasInitialCompiledRef = useRef(false);
 
   const isUuid = (value: unknown): value is string => {
     if (typeof value !== 'string') return false;
@@ -78,6 +80,8 @@ Your main content goes here.
   const triggerCompile = () => {
     setCompileTrigger((prev) => (prev === null ? 1 : prev + 1));
   };
+
+  const latexForViewer = aiProposal?.updatedLatex ?? latexContent;
 
   const loadChatHistory = useCallback(async () => {
     if (!taskId) return;
@@ -123,15 +127,19 @@ Your main content goes here.
 
   // Load task content on component mount
   useEffect(() => {
+    if (taskId && !isUuid(taskId)) {
+      // Non-UUID tasks are not supported.
+      setIsLoading(false);
+      setHasLoadedTask(false);
+      hasInitialCompiledRef.current = false;
+      navigate('/tasks');
+      return;
+    }
+    setHasLoadedTask(false);
+    hasInitialCompiledRef.current = false;
+
     const loadTaskContent = async () => {
       if (!taskId) return;
-
-      // Backend expects UUIDs for `Task.id`. For demo/non-UUID ids,
-      // keep the local editor LaTeX and avoid the failing API call.
-      if (!isUuid(taskId)) {
-        setIsLoading(false);
-        return;
-      }
       
       try {
         setIsLoading(true);
@@ -146,7 +154,7 @@ Your main content goes here.
         });
 
         if (!res.ok) {
-          // For demo/non-UUID ids (e.g. "demo-task"), we keep the editor's default LaTeX.
+          // Non-UUID ids are not supported; just bail out.
           if (res.status === 404 || res.status === 400) {
             return;
           }
@@ -170,11 +178,23 @@ Your main content goes here.
         console.error('Error loading task content:', error);
       } finally {
         setIsLoading(false);
+        setHasLoadedTask(true);
       }
     };
 
     loadTaskContent();
-  }, [taskId, loadChatHistory]);
+  }, [taskId, loadChatHistory, navigate]);
+
+  // Compile once after initial load finishes (so the preview isn't blank).
+  useEffect(() => {
+    if (!taskId) return;
+    if (!hasLoadedTask) return;
+    if (!isUuid(taskId)) return;
+    if (hasInitialCompiledRef.current) return;
+
+    hasInitialCompiledRef.current = true;
+    triggerCompile();
+  }, [taskId, hasLoadedTask]);
 
   // Auto-scroll chat thread to the newest message.
   // We explicitly set `scrollTop = scrollHeight` for reliability with `overflow-y-auto`.
@@ -191,7 +211,7 @@ Your main content goes here.
   const saveLatex = async (contentOverride?: string) => {
     if (!taskId) return;
     if (!isUuid(taskId)) {
-      // Non-UUID ids are "demo" / client-only until we add a create-task flow.
+      // Only UUID-backed tasks are supported.
       return;
     }
 
@@ -266,6 +286,9 @@ Your main content goes here.
         updatedLatex,
       });
 
+      // AI response is done; compile the proposed LaTeX.
+      triggerCompile();
+
       // Re-sync chat from the persisted backend state.
       await loadChatHistory();
     } catch (error) {
@@ -296,6 +319,9 @@ Your main content goes here.
 
   const handleCancelAiProposal = () => {
     setAiProposal(null);
+    // Revert the preview PDF back to the current editor LaTeX.
+    // Without this, the viewer may keep showing the PDF compiled for the proposed LaTeX.
+    triggerCompile();
   };
 
   if (isLoading) {
@@ -403,7 +429,7 @@ Your main content goes here.
               </button>
               <button
                 onClick={() => triggerCompile()}
-                disabled={isAgentWorking || isSaving || !latexContent.trim()}
+                disabled={isAgentWorking || isSaving || !latexForViewer.trim()}
                 className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 title="Compile LaTeX to PDF"
               >
@@ -459,7 +485,7 @@ Your main content goes here.
 
             <div className="flex-1 overflow-hidden">
               <LatexToPdfViewer
-                latex={latexContent}
+                latex={latexForViewer}
                 className="h-full"
                 compileTrigger={compileTrigger}
               />

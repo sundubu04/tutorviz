@@ -36,7 +36,7 @@ const TasksPage: React.FC = () => {
   const [editingTitle, setEditingTitle] = useState<string>('');
   const optionsMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const fetchTasks = async () => {
+  const fetchTasks = async (): Promise<any[]> => {
     try {
       setIsLoadingTasks(true);
       setTasksError(null);
@@ -56,9 +56,14 @@ const TasksPage: React.FC = () => {
       }
 
       const data = await res.json();
-      setTasks(Array.isArray(data) ? data : []);
+      const nextTasks = Array.isArray(data) ? data : [];
+      // Hide any legacy demo tasks created by earlier UI versions.
+      const filteredTasks = nextTasks.filter((t) => t?.title !== 'Demo Project');
+      setTasks(filteredTasks);
+      return filteredTasks;
     } catch (e: any) {
       setTasksError(e?.message || 'Failed to load tasks');
+      return [];
     } finally {
       setIsLoadingTasks(false);
     }
@@ -190,10 +195,6 @@ const TasksPage: React.FC = () => {
     void createTaskAndNavigate('Untitled Task');
   };
 
-  const handleDemoTaskClick = () => {
-    void createTaskAndNavigate('Demo Project');
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header with back button */}
@@ -221,55 +222,6 @@ const TasksPage: React.FC = () => {
           <div className="mb-6">
             <h2 className="text-lg font-medium text-gray-900 mb-4">Recent Tasks</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {/* Demo Task Card */}
-              <div
-                onClick={handleDemoTaskClick}
-                className="group bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden"
-              >
-                <div className="aspect-[3/4] bg-gradient-to-br from-blue-50 to-indigo-50 p-4 border-b border-gray-100">
-                  <div className="h-full bg-white rounded shadow-sm p-3 text-xs text-gray-600 leading-relaxed">
-                    <div className="font-semibold text-gray-800 mb-2">Demo Project</div>
-                    <div className="space-y-1">
-                      <div className="h-2 bg-gray-200 rounded w-3/4" />
-                      <div className="h-2 bg-gray-200 rounded w-1/2" />
-                      <div className="h-2 bg-gray-200 rounded w-2/3" />
-                      <div className="h-2 bg-gray-200 rounded w-1/3" />
-                    </div>
-                    <div className="mt-3 space-y-1">
-                      <div className="h-1.5 bg-blue-200 rounded w-full" />
-                      <div className="h-1.5 bg-blue-200 rounded w-4/5" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors">
-                        Demo Task
-                      </h3>
-                      <p className="text-xs text-gray-500 mt-1">Created today</p>
-                    </div>
-                    <button
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100 transition-all"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        alert('Task options menu');
-                      }}
-                    >
-                      <MoreVertical className="w-4 h-4 text-gray-400" />
-                    </button>
-                  </div>
-
-                  <div className="mt-2">
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      <FileText className="w-3 h-3 mr-1" />
-                      Task
-                    </span>
-                  </div>
-                </div>
-              </div>
-
               {isLoadingTasks ? null : tasks.map((task) => {
                 const createdAt = task?.createdAt ? new Date(task.createdAt) : null;
                 return (
