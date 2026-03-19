@@ -2,9 +2,24 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { PrismaClient } = require('@prisma/client');
 const { authenticateToken, requireRole, requireOwnership } = require('../middleware/auth');
+const { isUuid } = require('../utils/uuid');
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+const requireOwnedTask = async (taskId, userId) => {
+  if (!isUuid(taskId)) return { status: 400, error: 'Invalid taskId' };
+
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { id: true, createdBy: true }
+  });
+
+  if (!task) return { status: 404, error: 'Task not found' };
+  if (task.createdBy !== userId) return { status: 403, error: 'Access denied' };
+
+  return { status: 200, task };
+};
 
 // Get all tasks (with optional filtering)
 router.get('/', authenticateToken, async (req, res) => {
@@ -94,9 +109,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
 
     // Prisma expects UUIDs for the `id` field; handle non-UUID ids (e.g. demo-task) gracefully.
-    const isUuid =
-      typeof id === 'string' &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
     if (!isUuid) {
       return res.status(404).json({ error: 'Task not found' });
     }
@@ -153,6 +165,18 @@ router.post('/', authenticateToken, async (req, res) => {
         tags: tags || [],
       },
     });
+
+    // Create initial LaTeX version snapshot for persistence.
+    await prisma.taskVersion.create({
+      data: {
+        taskId: task.id,
+        versionNumber: 1,
+        latexContent: task.content,
+        changeSummary: 'Initial snapshot',
+        createdBy: req.user.id,
+      },
+    });
+
     res.status(201).json(task);
   } catch (error) {
     console.error('Error creating task:', error);
@@ -172,6 +196,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       where: { id },
       select: {
         createdBy: true,
+        content: true,
         creator: {
           select: {
             role: true,
@@ -189,12 +214,14 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized to update this task' });
     }
 
+    const willUpdateContent = typeof content === 'string' && content !== task.content;
+
     const updatedTask = await prisma.task.update({
       where: { id },
       data: {
         title: title || undefined,
         description: description || undefined,
-        content: content || undefined,
+        content: typeof content === 'string' ? content : undefined,
         taskType: taskType || undefined,
         difficultyLevel: difficultyLevel || undefined,
         estimatedTime: estimatedTime || undefined,
@@ -204,6 +231,26 @@ router.put('/:id', authenticateToken, async (req, res) => {
         updatedAt: new Date(),
       },
     });
+
+    // Create a new snapshot only when the LaTeX source changes.
+    if (willUpdateContent) {
+      const max = await prisma.taskVersion.aggregate({
+        _max: { versionNumber: true },
+        where: { taskId: id },
+      });
+      const nextVersionNumber = (max._max.versionNumber || 0) + 1;
+
+      await prisma.taskVersion.create({
+        data: {
+          taskId: id,
+          versionNumber: nextVersionNumber,
+          latexContent: content,
+          changeSummary: 'LaTeX content updated',
+          createdBy: req.user.id,
+        },
+      });
+    }
+
     res.json(updatedTask);
   } catch (error) {
     console.error('Error updating task:', error);
@@ -251,6 +298,301 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error deleting task:', error);
     res.status(500).json({ error: 'Failed to delete task' });
+  }
+});
+
+// ----------------------------
+// Task LaTeX versions endpoints
+// ----------------------------
+
+router.get('/:taskId/versions', authenticateToken, async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const ownership = await requireOwnedTask(taskId, req.user.id);
+    if (ownership.status !== 200) {
+      return res.status(ownership.status).json({ error: ownership.error });
+    }
+
+    const versions = await prisma.taskVersion.findMany({
+      where: { taskId },
+      orderBy: { versionNumber: 'desc' },
+    });
+
+    res.json(versions);
+  } catch (error) {
+    console.error('Error fetching task versions:', error);
+    res.status(500).json({ error: 'Failed to fetch task versions' });
+  }
+});
+
+router.get('/:taskId/versions/:versionNumber', authenticateToken, async (req, res) => {
+  try {
+    const { taskId, versionNumber } = req.params;
+    const parsedVersionNumber = Number(versionNumber);
+    if (!Number.isInteger(parsedVersionNumber) || parsedVersionNumber < 1) {
+      return res.status(400).json({ error: 'Invalid versionNumber' });
+    }
+
+    const ownership = await requireOwnedTask(taskId, req.user.id);
+    if (ownership.status !== 200) {
+      return res.status(ownership.status).json({ error: ownership.error });
+    }
+
+    const version = await prisma.taskVersion.findFirst({
+      where: { taskId, versionNumber: parsedVersionNumber },
+    });
+
+    if (!version) return res.status(404).json({ error: 'Version not found' });
+    res.json(version);
+  } catch (error) {
+    console.error('Error fetching task version:', error);
+    res.status(500).json({ error: 'Failed to fetch task version' });
+  }
+});
+
+router.post('/:taskId/versions', authenticateToken, async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const ownership = await requireOwnedTask(taskId, req.user.id);
+    if (ownership.status !== 200) {
+      return res.status(ownership.status).json({ error: ownership.error });
+    }
+
+    const { latexContent, changeSummary } = req.body || {};
+
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: { content: true },
+    });
+
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+
+    const snapshotLatex =
+      typeof latexContent === 'string' && latexContent.trim()
+        ? latexContent
+        : task.content;
+
+    const max = await prisma.taskVersion.aggregate({
+      _max: { versionNumber: true },
+      where: { taskId }
+    });
+
+    const nextVersionNumber = (max._max.versionNumber || 0) + 1;
+
+    const created = await prisma.taskVersion.create({
+      data: {
+        taskId,
+        versionNumber: nextVersionNumber,
+        latexContent: snapshotLatex,
+        changeSummary:
+          typeof changeSummary === 'string' && changeSummary.trim()
+            ? changeSummary.trim()
+            : 'Manual snapshot',
+        createdBy: req.user.id,
+      },
+    });
+
+    res.status(201).json(created);
+  } catch (error) {
+    console.error('Error creating task version:', error);
+    res.status(500).json({ error: 'Failed to create task version' });
+  }
+});
+
+router.delete('/:taskId/versions/:versionNumber', authenticateToken, async (req, res) => {
+  try {
+    const { taskId, versionNumber } = req.params;
+    const parsedVersionNumber = Number(versionNumber);
+    if (!Number.isInteger(parsedVersionNumber) || parsedVersionNumber < 1) {
+      return res.status(400).json({ error: 'Invalid versionNumber' });
+    }
+
+    const ownership = await requireOwnedTask(taskId, req.user.id);
+    if (ownership.status !== 200) {
+      return res.status(ownership.status).json({ error: ownership.error });
+    }
+
+    const deleted = await prisma.taskVersion.deleteMany({
+      where: { taskId, versionNumber: parsedVersionNumber },
+    });
+
+    if (deleted.count === 0) return res.status(404).json({ error: 'Version not found' });
+    res.json({ message: 'Version deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting task version:', error);
+    res.status(500).json({ error: 'Failed to delete task version' });
+  }
+});
+
+// Apply a historical version by updating the current task latex content
+// and creating an additional snapshot (append-only history).
+router.post('/:taskId/versions/:versionNumber/apply', authenticateToken, async (req, res) => {
+  try {
+    const { taskId, versionNumber } = req.params;
+    const parsedVersionNumber = Number(versionNumber);
+    if (!Number.isInteger(parsedVersionNumber) || parsedVersionNumber < 1) {
+      return res.status(400).json({ error: 'Invalid versionNumber' });
+    }
+
+    const ownership = await requireOwnedTask(taskId, req.user.id);
+    if (ownership.status !== 200) {
+      return res.status(ownership.status).json({ error: ownership.error });
+    }
+
+    const targetVersion = await prisma.taskVersion.findFirst({
+      where: { taskId, versionNumber: parsedVersionNumber },
+    });
+
+    if (!targetVersion) return res.status(404).json({ error: 'Version not found' });
+
+    const updatedTask = await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        content: targetVersion.latexContent,
+        updatedAt: new Date(),
+      },
+    });
+
+    const max = await prisma.taskVersion.aggregate({
+      _max: { versionNumber: true },
+      where: { taskId }
+    });
+    const nextVersionNumber = (max._max.versionNumber || 0) + 1;
+
+    const newSnapshot = await prisma.taskVersion.create({
+      data: {
+        taskId,
+        versionNumber: nextVersionNumber,
+        latexContent: targetVersion.latexContent,
+        changeSummary: `Applied version ${parsedVersionNumber}`,
+        createdBy: req.user.id,
+      },
+    });
+
+    res.json({ task: updatedTask, appliedVersion: newSnapshot });
+  } catch (error) {
+    console.error('Error applying task version:', error);
+    res.status(500).json({ error: 'Failed to apply task version' });
+  }
+});
+
+// ----------------------------
+// Task chat endpoints
+// ----------------------------
+
+router.get('/:taskId/chat/messages', authenticateToken, async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const ownership = await requireOwnedTask(taskId, req.user.id);
+    if (ownership.status !== 200) {
+      return res.status(ownership.status).json({ error: ownership.error });
+    }
+
+    const messages = await prisma.taskChatMessage.findMany({
+      where: { taskId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        proposedLatex: true,
+        createdAt: true,
+      },
+    });
+
+    res.json(messages);
+  } catch (error) {
+    console.error('Error fetching task chat messages:', error);
+    res.status(500).json({ error: 'Failed to fetch chat messages' });
+  }
+});
+
+router.post('/:taskId/chat/messages', authenticateToken, async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const ownership = await requireOwnedTask(taskId, req.user.id);
+    if (ownership.status !== 200) {
+      return res.status(ownership.status).json({ error: ownership.error });
+    }
+
+    const { content } = req.body || {};
+    if (typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: "Missing or invalid 'content'" });
+    }
+
+    const created = await prisma.taskChatMessage.create({
+      data: {
+        taskId,
+        createdBy: req.user.id,
+        role: 'user',
+        content: content.trim(),
+      },
+    });
+
+    res.status(201).json(created);
+  } catch (error) {
+    console.error('Error creating task chat message:', error);
+    res.status(500).json({ error: 'Failed to create chat message' });
+  }
+});
+
+router.patch('/:taskId/chat/messages/:messageId', authenticateToken, async (req, res) => {
+  try {
+    const { taskId, messageId } = req.params;
+    if (!isUuid(messageId)) return res.status(400).json({ error: 'Invalid messageId' });
+
+    const existing = await prisma.taskChatMessage.findFirst({
+      where: { id: messageId, taskId },
+      select: { id: true, createdBy: true },
+    });
+
+    if (!existing) return res.status(404).json({ error: 'Message not found' });
+    if (existing.createdBy !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+
+    const { content, proposedLatex } = req.body || {};
+    const updateData = {};
+
+    if (typeof content === 'string') updateData.content = content;
+    if (typeof proposedLatex === 'string') updateData.proposedLatex = proposedLatex;
+    if (proposedLatex === null) updateData.proposedLatex = null;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    const updated = await prisma.taskChatMessage.update({
+      where: { id: messageId },
+      data: updateData,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating task chat message:', error);
+    res.status(500).json({ error: 'Failed to update chat message' });
+  }
+});
+
+router.delete('/:taskId/chat/messages/:messageId', authenticateToken, async (req, res) => {
+  try {
+    const { taskId, messageId } = req.params;
+    if (!isUuid(messageId)) return res.status(400).json({ error: 'Invalid messageId' });
+
+    const existing = await prisma.taskChatMessage.findFirst({
+      where: { id: messageId, taskId },
+      select: { id: true, createdBy: true },
+    });
+
+    if (!existing) return res.status(404).json({ error: 'Message not found' });
+    if (existing.createdBy !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+
+    await prisma.taskChatMessage.delete({
+      where: { id: messageId },
+    });
+
+    res.json({ message: 'Message deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting task chat message:', error);
+    res.status(500).json({ error: 'Failed to delete chat message' });
   }
 });
 

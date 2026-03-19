@@ -38,6 +38,11 @@ enum TaskDifficultyLevel {
   expert
 }
 
+enum ChatRole {
+  user
+  assistant
+}
+
 model User {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email        String    @unique
@@ -55,6 +60,8 @@ model User {
   submissions        AssignmentSubmission[]
   createdEvents      CalendarEvent[]     @relation("EventCreator")
   createdTasks       Task[]              @relation("TaskCreator")
+  taskVersions       TaskVersion[]      @relation("TaskVersionCreator")
+  taskChatMessages   TaskChatMessage[]  @relation("TaskChatMessageCreator")
 
   @@map("users")
 }
@@ -167,6 +174,41 @@ model Task {
   // Relations
   class   Class? @relation(fields: [classId], references: [id], onDelete: Cascade)
   creator User   @relation("TaskCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  versions TaskVersion[]
+  chatMessages TaskChatMessage[]
 
   @@map("tasks")
+}
+
+model TaskVersion {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId         String   @map("task_id") @db.Uuid
+  versionNumber Int      @map("version_number")
+  latexContent  String   @map("latex_content")
+  changeSummary String?  @map("change_summary") @db.VarChar(2000)
+  createdBy      String   @map("created_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  task    Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  creator User @relation("TaskVersionCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, versionNumber])
+  @@map("task_versions")
+}
+
+model TaskChatMessage {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId         String   @map("task_id") @db.Uuid
+  createdBy      String   @map("created_by") @db.Uuid
+  role           ChatRole
+  content        String   @db.Text
+  proposedLatex String?  @map("proposed_latex") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  task    Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  creator User @relation("TaskChatMessageCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("task_chat_messages")
 }

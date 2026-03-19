@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -25,6 +25,7 @@ const TaskEditor: React.FC = () => {
   const [chatHistory, setChatHistory] = useState<{role: 'user' | 'assistant'; content: string; timestamp: Date}[]>([]);
   const [aiProposal, setAiProposal] = useState<{ assistantMessage: string; updatedLatex: string } | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [latexContent, setLatexContent] = useState(`\\documentclass{article}
 \\usepackage[utf8]{inputenc}
@@ -72,6 +73,40 @@ Your main content goes here.
     alert(`${buttonName} functionality to be implemented`);
   };
 
+  const loadChatHistory = async () => {
+    if (!taskId) return;
+    if (!isUuid(taskId)) {
+      setChatHistory([]);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('authToken');
+      const chatRes = await fetch(`http://localhost:5001/api/tasks/${taskId}/chat/messages`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!chatRes.ok) return;
+
+      const messages = await chatRes.json();
+      if (!Array.isArray(messages)) return;
+
+      setChatHistory(
+        messages.map((m: any) => ({
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: typeof m.content === 'string' ? m.content : '',
+          timestamp: m.createdAt ? new Date(m.createdAt) : new Date(),
+        }))
+      );
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+    }
+  };
+
   const toggleChat = () => {
     setIsChatOpen(!isChatOpen);
   };
@@ -116,6 +151,9 @@ Your main content goes here.
         if (typeof data?.content === 'string' && data.content.trim()) {
           setLatexContent(data.content);
         }
+
+        // Load persisted AI chat messages for this task.
+        await loadChatHistory();
       } catch (error) {
         // Avoid noisy console errors for benign cases.
         // Non-UUID ids will be handled by the `res.status === 404/400` early return above.
@@ -129,9 +167,16 @@ Your main content goes here.
   }, [taskId]);
 
   // Auto-scroll chat thread to the newest message.
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [chatHistory, isAgentWorking]);
+  // We explicitly set `scrollTop = scrollHeight` for reliability with `overflow-y-auto`.
+  useLayoutEffect(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+
+    // Wait one frame so layout is up to date (especially after large assistant messages).
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }, [chatHistory.length, isAgentWorking, aiProposal]);
 
   const saveLatex = async (contentOverride?: string) => {
     if (!taskId) return;
@@ -198,10 +243,6 @@ Your main content goes here.
     try {
       setIsAgentWorking(true);
       const token = localStorage.getItem('authToken');
-      const history = [
-        ...chatHistory.slice(-9).map((m) => ({ role: m.role, content: m.content })),
-        { role: 'user' as const, content: userMessage },
-      ];
 
       const res = await fetch(`http://localhost:5001/api/tasks/${taskId}/ai/latex-edit`, {
         method: 'POST',
@@ -212,7 +253,6 @@ Your main content goes here.
         body: JSON.stringify({
           message: userMessage,
           latexContent,
-          history,
         }),
       });
 
@@ -231,14 +271,8 @@ Your main content goes here.
         updatedLatex,
       });
 
-      setChatHistory(prev => [
-        ...prev,
-        {
-          role: 'assistant' as const,
-          content: assistantMessage || 'AI generated an updated LaTeX document.',
-          timestamp: new Date(),
-        },
-      ]);
+      // Re-sync chat from the persisted backend state.
+      await loadChatHistory();
     } catch (error) {
       console.error('Error getting AI response:', error);
       setAiProposal(null);
@@ -409,14 +443,14 @@ Your main content goes here.
               </button>
             </div>
             
-            <div className="flex-1 flex flex-col p-4">
+            <div className="flex-1 flex flex-col p-4 min-h-0">
               <div className="mb-4">
                 <p className="text-sm text-gray-600">Ask me to help with your task</p>
                 <p className="text-xs mt-1 text-gray-500">Ask for LaTeX edits; confirm before applying changes</p>
               </div>
 
               {/* Chat History */}
-              <div className="flex-1 space-y-2 mb-4 overflow-y-auto">
+              <div ref={chatScrollRef} className="flex-1 space-y-2 mb-4 overflow-y-auto">
                 {chatHistory.map((message, index) => (
                   <div
                     key={index}
@@ -429,7 +463,7 @@ Your main content goes here.
                           : 'bg-gray-100 text-gray-900'
                       }`}
                     >
-                      <p className="text-sm">{message.content}</p>
+                      <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
                       <p className="text-xs mt-1 opacity-70">
                         {message.timestamp.toLocaleTimeString()}
                       </p>
