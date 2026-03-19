@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, FileText, MoreVertical } from 'lucide-react';
 
@@ -31,38 +31,119 @@ const TasksPage: React.FC = () => {
   const [isLoadingTasks, setIsLoadingTasks] = useState(true);
   const [tasks, setTasks] = useState<any[]>([]);
   const [tasksError, setTasksError] = useState<string | null>(null);
+  const [openMenuTaskId, setOpenMenuTaskId] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<{ id: string; title: string } | null>(null);
+  const [editingTitle, setEditingTitle] = useState<string>('');
+  const optionsMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const fetchTasks = async () => {
+    try {
+      setIsLoadingTasks(true);
+      setTasksError(null);
+
+      const token = localStorage.getItem('authToken');
+      const res = await fetch('http://localhost:5001/api/tasks', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} ${errText}`.trim());
+      }
+
+      const data = await res.json();
+      setTasks(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      setTasksError(e?.message || 'Failed to load tasks');
+    } finally {
+      setIsLoadingTasks(false);
+    }
+  };
 
   useEffect(() => {
-    const loadTasks = async () => {
-      try {
-        setIsLoadingTasks(true);
-        setTasksError(null);
+    void fetchTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-        const token = localStorage.getItem('authToken');
-        const res = await fetch('http://localhost:5001/api/tasks', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        });
+  useEffect(() => {
+    if (!openMenuTaskId) return;
 
-        if (!res.ok) {
-          const errText = await res.text().catch(() => '');
-          throw new Error(`HTTP ${res.status} ${errText}`.trim());
-        }
-
-        const data = await res.json();
-        setTasks(Array.isArray(data) ? data : []);
-      } catch (e: any) {
-        setTasksError(e?.message || 'Failed to load tasks');
-      } finally {
-        setIsLoadingTasks(false);
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (!optionsMenuRef.current) return;
+      if (!optionsMenuRef.current.contains(target)) {
+        setOpenMenuTaskId(null);
       }
     };
 
-    loadTasks();
-  }, []);
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [openMenuTaskId]);
+
+  const startEditTitle = (task: any) => {
+    setOpenMenuTaskId(null);
+    setEditingTask({ id: task.id, title: task.title || '' });
+    setEditingTitle(task.title || '');
+  };
+
+  const submitEditTitle = async () => {
+    if (!editingTask) return;
+    const nextTitle = editingTitle.trim();
+    if (!nextTitle) return;
+
+    try {
+      const token = localStorage.getItem('authToken');
+      const res = await fetch(`http://localhost:5001/api/tasks/${editingTask.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ title: nextTitle }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} ${errText}`.trim());
+      }
+
+      setEditingTask(null);
+      setEditingTitle('');
+      await fetchTasks();
+    } catch (e: any) {
+      alert(e?.message || 'Failed to update task title');
+    }
+  };
+
+  const deleteTask = async (taskId: string) => {
+    const confirmed = window.confirm('Delete this task? This will remove it from your list.');
+    if (!confirmed) return;
+
+    try {
+      const token = localStorage.getItem('authToken');
+      const res = await fetch(`http://localhost:5001/api/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} ${errText}`.trim());
+      }
+
+      await fetchTasks();
+    } catch (e: any) {
+      alert(e?.message || 'Failed to delete task');
+    } finally {
+      setOpenMenuTaskId(null);
+    }
+  };
 
   const createTaskAndNavigate = async (title: string) => {
     if (isCreatingTask) return;
@@ -195,7 +276,7 @@ const TasksPage: React.FC = () => {
                   <div
                     key={task.id}
                     onClick={() => navigate(`/task-editor/${task.id}`)}
-                    className="group bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden"
+                    className="group bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden relative"
                   >
                     <div className="aspect-[3/4] bg-gradient-to-br from-blue-50 to-indigo-50 p-4 border-b border-gray-100">
                       <div className="h-full bg-white rounded shadow-sm p-3 text-xs text-gray-600 leading-relaxed">
@@ -224,11 +305,35 @@ const TasksPage: React.FC = () => {
                           className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100 transition-all"
                           onClick={(e) => {
                             e.stopPropagation();
-                            alert('Task options menu');
+                            setOpenMenuTaskId((prev) => (prev === task.id ? null : task.id));
                           }}
+                          aria-label="Task options"
                         >
                           <MoreVertical className="w-4 h-4 text-gray-400" />
                         </button>
+
+                        {openMenuTaskId === task.id && (
+                          <div
+                            className="absolute mt-2 right-3 bg-white border border-gray-200 rounded-md shadow-sm z-10 w-40"
+                            onClick={(e) => e.stopPropagation()}
+                            ref={optionsMenuRef}
+                          >
+                            <button
+                              className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                              onClick={() => startEditTitle(task)}
+                              type="button"
+                            >
+                              Edit title
+                            </button>
+                            <button
+                              className="block w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                              onClick={() => deleteTask(task.id)}
+                              type="button"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       <div className="mt-2">
@@ -274,6 +379,53 @@ const TasksPage: React.FC = () => {
               </p>
             </div>
           ) : null}
+
+          {editingTask && (
+            <div
+              className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50"
+              onClick={() => {
+                setEditingTask(null);
+                setEditingTitle('');
+              }}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div
+                className="bg-white rounded-lg shadow-lg p-4 w-full max-w-md"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2 className="text-base font-semibold text-gray-900">Edit Task Title</h2>
+                <p className="text-sm text-gray-600 mt-1">This only updates the title.</p>
+
+                <input
+                  value={editingTitle}
+                  onChange={(e) => setEditingTitle(e.target.value)}
+                  className="mt-3 w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoFocus
+                />
+
+                <div className="flex gap-2 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => void submitEditTitle()}
+                    className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingTask(null);
+                      setEditingTitle('');
+                    }}
+                    className="flex-1 px-3 py-2 bg-white text-gray-900 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
