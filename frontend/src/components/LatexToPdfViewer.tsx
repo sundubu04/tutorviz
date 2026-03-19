@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useLatexPdf } from "../hooks/useLatexPdf";
 import { RefreshCw, AlertCircle, FileText } from "lucide-react";
 
@@ -6,42 +6,52 @@ interface LatexToPdfViewerProps {
   latex: string;
   className?: string;
   onPdfUrlChange?: (url: string | null) => void;
+  compileTrigger?: number | null;
 }
 
-export default function LatexToPdfViewer({ latex, className = "", onPdfUrlChange }: LatexToPdfViewerProps) {
+export default function LatexToPdfViewer({
+  latex,
+  className = "",
+  onPdfUrlChange,
+  compileTrigger = null,
+}: LatexToPdfViewerProps) {
   const { status, compile, reset } = useLatexPdf();
   const [url, setUrl] = useState<string | null>(null);
+  const urlRef = useRef<string | null>(null);
   const [lastCompiledLatex, setLastCompiledLatex] = useState<string>("");
+  const lastCompileTriggerRef = useRef<number | null>(null);
 
-  // Debounced compilation to avoid excessive API calls
-  const debouncedCompile = useCallback(
-    (() => {
-      let timeoutId: NodeJS.Timeout;
-      return (latexContent: string) => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(async () => {
-          if (latexContent.trim() && latexContent !== lastCompiledLatex) {
-            try {
-              console.log("Debounced compilation starting for:", latexContent.substring(0, 100) + "...");
-              const u = await compile(latexContent, "main");
-              setUrl(u);
-              setLastCompiledLatex(latexContent);
-              console.log("Debounced compilation successful");
-            } catch (error) {
-              console.error("LaTeX compilation error in debounced compile:", error);
-            }
-          }
-        }, 1000); // 1 second debounce
-      };
-    })(),
-    [compile, lastCompiledLatex]
+  const doCompile = useCallback(
+    async (latexContent: string) => {
+      if (!latexContent.trim()) return;
+
+      // Skip redundant compiles.
+      if (latexContent === lastCompiledLatex && url) return;
+
+      const u = await compile(latexContent, "main");
+      urlRef.current = u;
+      setUrl(u);
+      setLastCompiledLatex(latexContent);
+    },
+    [compile, lastCompiledLatex, url]
   );
 
+  // Compile only when the compile button triggers (via compileTrigger).
   useEffect(() => {
-    if (latex.trim()) {
-      debouncedCompile(latex);
-    }
-  }, [latex, debouncedCompile]);
+    if (compileTrigger === null) return;
+    if (!latex.trim()) return;
+    if (lastCompileTriggerRef.current === compileTrigger) return;
+
+    lastCompileTriggerRef.current = compileTrigger;
+
+    void (async () => {
+      try {
+        await doCompile(latex);
+      } catch (error) {
+        console.error("LaTeX compilation error:", error);
+      }
+    })();
+  }, [compileTrigger, latex, doCompile]);
 
   // Notify parent when PDF URL changes
   useEffect(() => {
@@ -50,23 +60,20 @@ export default function LatexToPdfViewer({ latex, className = "", onPdfUrlChange
     }
   }, [url, onPdfUrlChange]);
 
-  // Cleanup URL on unmount
+  // Cleanup object URLs on unmount.
   useEffect(() => {
     return () => {
-      if (url) {
-        URL.revokeObjectURL(url);
-      }
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     };
-  }, [url]);
+  }, []);
 
   const handleRetry = async () => {
     reset();
+    urlRef.current = null;
     setUrl(null);
     setLastCompiledLatex("");
     try {
-      const u = await compile(latex, "main");
-      setUrl(u);
-      setLastCompiledLatex(latex);
+      await doCompile(latex);
     } catch (error) {
       console.error("LaTeX compilation error:", error);
     }

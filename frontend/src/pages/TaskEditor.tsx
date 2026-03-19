@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -6,8 +6,7 @@ import {
   Redo,
   Bot,
   Code,
-  X,
-  Download
+  X
 } from 'lucide-react';
 import LatexToPdfViewer from '../components/LatexToPdfViewer';
 import ResizablePanel from '../components/resizable/ResizablePanel';
@@ -51,7 +50,10 @@ Enter your task content here.
 Your main content goes here.
 
 \\end{document}`);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [taskTitle, setTaskTitle] = useState<string>('');
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState<string>('');
+  const [compileTrigger, setCompileTrigger] = useState<number | null>(null);
 
   const isUuid = (value: unknown): value is string => {
     if (typeof value !== 'string') return false;
@@ -73,7 +75,11 @@ Your main content goes here.
     alert(`${buttonName} functionality to be implemented`);
   };
 
-  const loadChatHistory = async () => {
+  const triggerCompile = () => {
+    setCompileTrigger((prev) => (prev === null ? 1 : prev + 1));
+  };
+
+  const loadChatHistory = useCallback(async () => {
     if (!taskId) return;
     if (!isUuid(taskId)) {
       setChatHistory([]);
@@ -105,7 +111,7 @@ Your main content goes here.
     } catch (error) {
       console.error('Error loading chat history:', error);
     }
-  };
+  }, [taskId]);
 
   const toggleChat = () => {
     setIsChatOpen(!isChatOpen);
@@ -152,6 +158,10 @@ Your main content goes here.
           setLatexContent(data.content);
         }
 
+        if (typeof data?.title === 'string') {
+          setTaskTitle(data.title);
+        }
+
         // Load persisted AI chat messages for this task.
         await loadChatHistory();
       } catch (error) {
@@ -164,7 +174,7 @@ Your main content goes here.
     };
 
     loadTaskContent();
-  }, [taskId]);
+  }, [taskId, loadChatHistory]);
 
   // Auto-scroll chat thread to the newest message.
   // We explicitly set `scrollTop = scrollHeight` for reliability with `overflow-y-auto`.
@@ -207,21 +217,6 @@ Your main content goes here.
       alert('Failed to save task. Please try again.');
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleSave = async () => {
-    await saveLatex();
-  };
-
-  const handleDownload = () => {
-    if (pdfUrl) {
-      const link = document.createElement('a');
-      link.href = pdfUrl;
-      link.download = 'document.pdf';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
     }
   };
 
@@ -292,8 +287,8 @@ Your main content goes here.
   const handleApplyAiProposal = async () => {
     if (!aiProposal || !taskId) return;
     const nextLatex = aiProposal.updatedLatex;
-    setAiProposal(null);
     setLatexContent(nextLatex);
+    setAiProposal(null);
     if (isUuid(taskId)) {
       await saveLatex(nextLatex);
     }
@@ -329,9 +324,65 @@ Your main content goes here.
                 <span>Back to Tasks</span>
               </button>
               <div className="h-6 w-px bg-gray-300"></div>
-              <h1 className="text-xl font-semibold text-gray-900">Task Editor</h1>
-              {taskId && (
-                <span className="text-sm text-gray-500">ID: {taskId}</span>
+              {isEditingTitle ? (
+                <input
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onBlur={async () => {
+                    if (!taskId) return;
+                    if (!isUuid(taskId)) {
+                      setIsEditingTitle(false);
+                      return;
+                    }
+                    const next = titleDraft.trim();
+                    if (!next) {
+                      setTitleDraft(taskTitle);
+                      setIsEditingTitle(false);
+                      return;
+                    }
+                    if (next === taskTitle) {
+                      setIsEditingTitle(false);
+                      return;
+                    }
+
+                    try {
+                      const token = localStorage.getItem('authToken');
+                      const res = await fetch(`http://localhost:5001/api/tasks/${taskId}`, {
+                        method: 'PUT',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                        },
+                        body: JSON.stringify({ title: next }),
+                      });
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      setTaskTitle(next);
+                      setIsEditingTitle(false);
+                    } catch (e) {
+                      console.error('Error saving task title:', e);
+                      setTitleDraft(taskTitle);
+                      setIsEditingTitle(false);
+                    }
+                  }}
+                  onKeyDown={async (e) => {
+                    if (e.key !== 'Enter') return;
+                    (e.target as HTMLInputElement).blur();
+                  }}
+                  className="text-xl font-semibold text-gray-900 bg-transparent border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  autoFocus
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTitleDraft(taskTitle || 'Untitled Task');
+                    setIsEditingTitle(true);
+                  }}
+                  className="text-xl font-semibold text-gray-900 hover:text-gray-700 transition-colors"
+                  title="Click to edit title"
+                >
+                  {taskTitle?.trim() ? taskTitle : 'Untitled Task'}
+                </button>
               )}
             </div>
             
@@ -351,19 +402,12 @@ Your main content goes here.
                 <Redo className="h-5 w-5" />
               </button>
               <button
-                onClick={handleDownload}
-                disabled={!pdfUrl}
-                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Download PDF"
+                onClick={() => triggerCompile()}
+                disabled={isAgentWorking || isSaving || !latexContent.trim()}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Compile LaTeX to PDF"
               >
-                <Download className="h-5 w-5" />
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isSaving ? 'Saving...' : 'Save'}
+                Compile
               </button>
             </div>
           </div>
@@ -414,7 +458,11 @@ Your main content goes here.
           <div className="h-full flex flex-col">
 
             <div className="flex-1 overflow-hidden">
-              <LatexToPdfViewer latex={latexContent} className="h-full" onPdfUrlChange={setPdfUrl} />
+              <LatexToPdfViewer
+                latex={latexContent}
+                className="h-full"
+                compileTrigger={compileTrigger}
+              />
             </div>
           </div>
         </div>
