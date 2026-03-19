@@ -60,7 +60,9 @@ async function editLatex({ taskId, message, latexContent, history }) {
     throw new Error(`latexContent is too large for the AI prompt (max ${MAX_LATEX_FOR_PROMPT_CHARS} chars)`);
   }
 
-  const model = process.env.OPENAI_TASK_EDITOR_MODEL || 'gpt-4o-mini';
+  // Prefer a dedicated editor model, but fall back to the general OpenAI model.
+  // Ultimately default to a known-good model to avoid "missing model parameter" errors.
+  const model = process.env.OPENAI_MODEL || 'gpt-5.2';
 
   const systemPrompt = [
     'You are an AI assistant that edits a full LaTeX document for a specific task.',
