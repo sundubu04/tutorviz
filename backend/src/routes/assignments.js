@@ -100,7 +100,13 @@ const mapAssignmentRow = (row) => {
   // Normalize to the shape expected by the frontend.
   const dueDateValue = row.dueDate ?? row.due_date ?? null;
   const createdAtValue = row.createdAt ?? row.created_at ?? null;
-  const submittedAtValue = row.submittedAt ?? row.submitted_at ?? null;
+  const submission = row.submissions?.[0] ?? null;
+  const submittedAtValue =
+    row.submittedAt ??
+    row.submitted_at ??
+    submission?.submittedAt ??
+    submission?.submitted_at ??
+    null;
 
   const className =
     row.className ??
@@ -130,9 +136,9 @@ const mapAssignmentRow = (row) => {
     className,
     classId,
     submissionCount,
-    submissionId: row.submissionId ?? row.submission_id ?? null,
+    submissionId: row.submissionId ?? row.submission_id ?? submission?.id ?? null,
     submittedAt: submittedAtValue ? new Date(submittedAtValue).toISOString() : null,
-    grade: row.grade,
+    grade: row.grade ?? submission?.grade,
     createdAt: createdAtValue ? new Date(createdAtValue).toISOString() : null
   };
 };
@@ -217,35 +223,27 @@ const handleStudentAssignments = async (client, assignmentId, classId, assignedS
 // Get all assignments for current user
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    let query;
-    let params = [req.user.id];
+    let where = {};
 
     if (req.user.role === 'teacher') {
-      query = `
-        SELECT 
-          a.id, a.title, a.description, a.due_date, a.priority, a.topic, a.created_at,
-          c.name as class_name, c.id as class_id,
-          COUNT(ass.id) as submission_count
-        FROM assignments a
-        LEFT JOIN classes c ON a.class_id = c.id
-        LEFT JOIN assignment_submissions ass ON a.id = ass.assignment_id
-        WHERE a.created_by = $1
-        GROUP BY a.id, c.name, c.id
-        ORDER BY a.due_date ASC
-      `;
-    } else {
-      query = `
-        SELECT 
-          a.id, a.title, a.description, a.due_date, a.priority, a.topic, a.created_at,
-          c.name as class_name, c.id as class_id,
-          ass.id as submission_id, ass.submitted_at, ass.grade
-        FROM assignments a
-        INNER JOIN classes c ON a.class_id = c.id
-        INNER JOIN class_enrollments ce ON c.id = ce.class_id
-        LEFT JOIN assignment_submissions ass ON a.id = ass.assignment_id AND ass.student_id = $1
-        WHERE ce.student_id = $1
-        ORDER BY a.due_date ASC
-      `;
+      where = { createdBy: req.user.id };
+    } else if (req.user.role === 'student') {
+      const enrollments = await prisma.classEnrollment.findMany({
+        where: { studentId: req.user.id },
+        select: { classId: true }
+      });
+
+      const classIds = enrollments.map((e) => e.classId);
+      if (classIds.length === 0) {
+        return res.json({ assignments: [] });
+      }
+
+      where = { classId: { in: classIds } };
+    } else if (req.user.role === 'admin') {
+      // Admins can view both "student" and "teacher" experiences.
+      // For now we show all assignments; submission status is derived (if any)
+      // from assignment_submissions for the current admin id.
+      where = {};
     }
 
     const result = await prisma.assignment.findMany({
@@ -269,15 +267,39 @@ router.get('/', authenticateToken, async (req, res) => {
           },
         },
       },
-      where: {
-        createdBy: req.user.id,
-      },
+      where,
       orderBy: {
         dueDate: 'asc',
       },
     });
-    const assignments = result.map(mapAssignmentRow);
-    
+
+    // Populate current-student submissions (so the UI can display "Submitted" status).
+    // Doing this in a separate query avoids Prisma nested `where` limitations.
+    let normalized = result;
+    if (req.user.role === 'student' && result.length > 0) {
+      const assignmentIds = result.map((a) => a.id);
+
+      const submissions = await prisma.assignmentSubmission.findMany({
+        where: {
+          studentId: req.user.id,
+          assignmentId: { in: assignmentIds },
+        },
+        select: { assignmentId: true, id: true, submittedAt: true, grade: true },
+      });
+
+      const submissionByAssignmentId = new Map(
+        submissions.map((s) => [s.assignmentId, s])
+      );
+
+      normalized = result.map((a) => ({
+        ...a,
+        submissions: submissionByAssignmentId.get(a.id)
+          ? [submissionByAssignmentId.get(a.id)]
+          : [],
+      }));
+    }
+
+    const assignments = normalized.map(mapAssignmentRow);
     res.json({ assignments });
   } catch (error) {
     console.error('Error fetching assignments:', error);

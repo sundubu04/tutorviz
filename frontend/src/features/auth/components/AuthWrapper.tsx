@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../../contexts/AuthContext';
+import { apiClient } from '../../../utils/apiClient';
 import Login from './Login';
 import Register from './Register';
 
@@ -8,8 +9,28 @@ interface AuthWrapperProps {
 }
 
 const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
-  const { user, isLoading, error, login, register, clearError } = useAuth();
+  const { user, isLoading, error, login, register, logout, clearError } = useAuth();
   const [isLoginMode, setIsLoginMode] = useState(true);
+
+  const isPendingVerification =
+    user?.role !== 'admin' && user?.verified === false;
+
+  useEffect(() => {
+    if (!isPendingVerification) return;
+
+    const interval = window.setInterval(async () => {
+      try {
+        const { user: refreshed } = await apiClient.getProfile();
+        if (refreshed.verified) {
+          window.location.reload();
+        }
+      } catch {
+        // Ignore transient errors while polling.
+      }
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [isPendingVerification]);
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -50,6 +71,28 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
           />
         )}
       </>
+    );
+  }
+
+  if (isPendingVerification) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-blue-50 px-4">
+        <div className="max-w-md w-full bg-white rounded-lg shadow p-8 text-center">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">Verification required</h2>
+          <p className="text-gray-600 mb-6">
+            Your account needs to be verified by an administrator before you can access the app.
+          </p>
+          <div className="flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => logout()}
+              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 

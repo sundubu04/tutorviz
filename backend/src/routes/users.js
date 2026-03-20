@@ -87,6 +87,39 @@ router.get('/', authenticateToken, requireRole(['admin']), async (req, res) => {
   }
 });
 
+// Get pending (unverified) users (admin only)
+router.get('/pending', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const result = await prisma.user.findMany({
+      where: {
+        id: { not: req.user.id },
+        verified: false
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        verified: true,
+        createdAt: true,
+        updatedAt: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    res.json({ users: result });
+  } catch (error) {
+    console.error('Pending users fetch error:', error);
+    res.status(500).json({
+      error: 'Pending users fetch failed',
+      message: 'An error occurred while fetching pending users'
+    });
+  }
+});
+
 // Get single user by ID
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
@@ -309,6 +342,39 @@ router.put('/:id', authenticateToken, [
     res.status(500).json({ 
       error: 'User update failed',
       message: 'An error occurred while updating the user'
+    });
+  }
+});
+
+// Admin: verify a user account
+router.patch('/:id/verify', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: { verified: true },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        verified: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    res.json({
+      message: 'User verified successfully',
+      user: updated
+    });
+  } catch (error) {
+    console.error('User verify error:', error);
+    res.status(500).json({
+      error: 'User verification failed',
+      message: 'An error occurred while verifying the user'
     });
   }
 });

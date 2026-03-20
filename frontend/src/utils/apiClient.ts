@@ -7,6 +7,7 @@ export interface User {
   firstName: string;
   lastName: string;
   role: 'student' | 'teacher' | 'admin';
+  verified: boolean;
   avatarUrl?: string;
   createdAt: string;
   updatedAt: string;
@@ -176,6 +177,17 @@ class ApiClient {
     return this.request<{ user: User }>('/auth/profile', {
       method: 'PUT',
       body: JSON.stringify(profileData),
+    });
+  }
+
+  // Admin methods
+  async getPendingUsers(): Promise<{ users: User[] }> {
+    return this.request<{ users: User[] }>('/users/pending');
+  }
+
+  async verifyUser(userId: string): Promise<{ message: string; user: User }> {
+    return this.request<{ message: string; user: User }>(`/users/${userId}/verify`, {
+      method: 'PATCH',
     });
   }
 

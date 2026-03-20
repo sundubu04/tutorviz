@@ -16,15 +16,17 @@ import {
   PlusSquare,
   BarChart3, 
   Settings,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  UserCheck
 } from 'lucide-react';
 import { apiClient } from './utils/apiClient';
 import { type Class, type TodoItem } from './types';
 import { classesService } from './services';
 import { type Class as ApiClass } from './utils/apiClient';
+import AdminVerification from './pages/AdminVerification';
 import './App.css';
 
-const menuItems = [
+const baseMenuItems = [
   { id: 'classes', label: 'Classes', icon: <BookOpen className="w-5 h-5" /> },
   { id: 'calendar', label: 'Calendar', icon: <CalendarIcon className="w-5 h-5" /> },
   { id: 'assignments', label: 'Assignments', icon: <FileText className="w-5 h-5" /> },
@@ -36,6 +38,13 @@ const menuItems = [
 function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const menuItems =
+    user?.role === 'admin'
+      ? [
+          ...baseMenuItems,
+          { id: 'adminVerification', label: 'Verify Users', icon: <UserCheck className="w-5 h-5" /> }
+        ]
+      : baseMenuItems;
   const [activeMenuItem, setActiveMenuItem] = useState('classes');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -208,6 +217,8 @@ function Dashboard() {
             <p className="text-gray-600">Settings panel coming soon...</p>
           </div>
         );
+      case 'adminVerification':
+        return <AdminVerification />;
       default:
         return <div>Content not found</div>;
     }

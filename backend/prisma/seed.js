@@ -9,6 +9,7 @@ async function main() {
   // Create sample users
   const teacherPassword = await bcrypt.hash('password123', 12);
   const studentPassword = await bcrypt.hash('password123', 12);
+  const adminPassword = await bcrypt.hash('password123', 12);
 
   const teacher = await prisma.user.upsert({
     where: { email: 'teacher@tutoriai.com' },
@@ -19,6 +20,7 @@ async function main() {
       firstName: 'John',
       lastName: 'Doe',
       role: 'teacher',
+      verified: true,
     },
   });
 
@@ -31,6 +33,20 @@ async function main() {
       firstName: 'Jane',
       lastName: 'Smith',
       role: 'student',
+      verified: true,
+    },
+  });
+
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@tutoriai.com' },
+    update: {},
+    create: {
+      email: 'admin@tutoriai.com',
+      passwordHash: adminPassword,
+      firstName: 'Admin',
+      lastName: 'User',
+      role: 'admin',
+      verified: true,
     },
   });
 

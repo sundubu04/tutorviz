@@ -4,7 +4,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
-    container_name: tutoriai-backend-dev
+    container_name: tutorviz-backend-dev
     environment:
       NODE_ENV: development
       PORT: 5001
@@ -45,7 +45,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: tutoriai-frontend-dev
+    container_name: tutorviz-frontend-dev
     environment:
       # File watching optimizations for React
       - CHOKIDAR_USEPOLLING=true
@@ -69,4 +69,4 @@ services:
 
 networks:
   default:
-    name: tutoriai-dev-network
+    name: tutorviz-dev-network

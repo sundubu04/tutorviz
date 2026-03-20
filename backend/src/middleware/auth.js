@@ -149,6 +149,7 @@ const authenticateToken = async (req, res, next) => {
       const lastName =
         meta.lastName || meta.last_name || meta.family_name || 'Unknown';
       const role = meta.role || 'student';
+      const verified = role === 'admin';
 
       user = await prisma.user.create({
         data: {
@@ -157,7 +158,8 @@ const authenticateToken = async (req, res, next) => {
           passwordHash: '', // legacy column; Supabase Auth is the source of truth for credentials
           firstName,
           lastName,
-          role
+          role,
+          verified
         }
       });
     }
@@ -168,9 +170,25 @@ const authenticateToken = async (req, res, next) => {
       firstName: user.firstName,
       lastName: user.lastName,
       role: user.role,
+      verified: user.verified,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt
     };
+
+    // If the user is not verified, only allow access to profile endpoints.
+    // Admins are always allowed to pass this gate.
+    const isProfileEndpoint =
+      typeof req.originalUrl === 'string' && req.originalUrl.startsWith('/api/auth/profile');
+
+    if (req.user.role !== 'admin' && req.user.verified === false && !isProfileEndpoint) {
+      return res.status(403).json(
+        createErrorResponse(
+          403,
+          'Account pending verification',
+          'Please contact an administrator to verify your account'
+        )
+      );
+    }
 
     next();
   } catch (error) {
@@ -187,6 +205,11 @@ const requireRole = (roles) => {
     if (!req.user) {
       return res.status(401).json(createErrorResponse(401, 'Authentication required', 
         'Please authenticate first'));
+    }
+
+    // Admins can access student + teacher routes regardless of the required role list.
+    if (req.user.role === 'admin') {
+      return next();
     }
 
     if (!roles.includes(req.user.role)) {
