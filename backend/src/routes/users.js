@@ -9,6 +9,11 @@ const prisma = new PrismaClient();
 // Get all users (admin only)
 router.get('/', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
+    return res.status(403).json({
+      error: 'Access denied',
+      message: 'Admins can only access pending users via GET /api/users/pending.'
+    });
+
     const { role, search } = req.query;
     
     let query = `
@@ -125,8 +130,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Users can only view their own profile unless they're admin
-    if (req.user.role !== 'admin' && req.user.id !== id) {
+    // Users can only view their own profile
+    if (req.user.id !== id) {
       return res.status(403).json({ 
         error: 'Access denied',
         message: 'You can only view your own profile'
@@ -254,18 +259,18 @@ router.put('/:id', authenticateToken, [
     const { firstName, lastName, role, avatarUrl } = req.body;
 
     // Check permissions
-    if (req.user.role !== 'admin' && req.user.id !== id) {
+    if (req.user.id !== id) {
       return res.status(403).json({ 
         error: 'Access denied',
         message: 'You can only update your own profile'
       });
     }
 
-    // Only admins can change roles
-    if (role && req.user.role !== 'admin') {
+    // Role changes are not allowed via this endpoint.
+    if (role) {
       return res.status(403).json({ 
         error: 'Access denied',
-        message: 'Only administrators can change user roles'
+        message: 'Role changes are not allowed. Admins can only verify users via the verification route.'
       });
     }
 
@@ -281,11 +286,6 @@ router.put('/:id', authenticateToken, [
     if (lastName) {
       updateFields.push(`last_name = $${paramCount++}`);
       updateValues.push(lastName);
-    }
-
-    if (role && req.user.role === 'admin') {
-      updateFields.push(`role = $${paramCount++}`);
-      updateValues.push(role);
     }
 
     if (avatarUrl) {
@@ -316,7 +316,6 @@ router.put('/:id', authenticateToken, [
       data: {
         [updateFields[0]]: updateValues[0],
         [updateFields[1]]: updateValues[1],
-        ...(role && req.user.role === 'admin' ? { role: role } : {}),
         ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
         updated_at: new Date(),
       },
@@ -384,13 +383,10 @@ router.delete('/:id', authenticateToken, requireRole(['admin']), async (req, res
   try {
     const { id } = req.params;
 
-    // Prevent admin from deleting themselves
-    if (req.user.id === id) {
-      return res.status(400).json({ 
-        error: 'Cannot delete self',
-        message: 'You cannot delete your own account'
-      });
-    }
+    return res.status(403).json({
+      error: 'Access denied',
+      message: 'User deletion is not available for admins in this setup.'
+    });
 
     const result = await prisma.user.delete({
       where: {

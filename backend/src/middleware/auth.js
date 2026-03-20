@@ -207,11 +207,6 @@ const requireRole = (roles) => {
         'Please authenticate first'));
     }
 
-    // Admins can access student + teacher routes regardless of the required role list.
-    if (req.user.role === 'admin') {
-      return next();
-    }
-
     if (!roles.includes(req.user.role)) {
       return res.status(403).json(createErrorResponse(403, 'Insufficient permissions', 
         `Access denied. Required roles: ${roles.join(', ')}`));
@@ -228,11 +223,6 @@ const requireOwnership = (resourceTable, resourceIdField = 'id', ownerField = 'c
       if (!req.user) {
         return res.status(401).json(createErrorResponse(401, 'Authentication required', 
           'Please authenticate first'));
-      }
-
-      // Admins can access everything
-      if (req.user.role === 'admin') {
-        return next();
       }
 
       const resourceId = req.params[resourceIdField];
@@ -297,8 +287,8 @@ const requireClassEnrollment = () => {
           'Class ID is missing from request'));
       }
 
-      // Teachers and admins can access any class
-      if (req.user.role === 'teacher' || req.user.role === 'admin') {
+      // Teachers can access any class
+      if (req.user.role === 'teacher') {
         return next();
       }
 

@@ -272,7 +272,7 @@ const Assignments: React.FC<AssignmentsProps> = ({ userRole, onAssignmentChange 
           </div>
 
           {/* Create Assignment Button */}
-          {(userRole === 'teacher' || userRole === 'admin') && (
+          {userRole === 'teacher' && (
             <div className="lg:w-auto">
               <Button
                 onClick={handleCreateAssignment}
@@ -379,7 +379,7 @@ const Assignments: React.FC<AssignmentsProps> = ({ userRole, onAssignmentChange 
                     <Eye className="w-4 h-4" />
                   </button>
                   
-                  {(userRole === 'teacher' || userRole === 'admin') && (
+                  {userRole === 'teacher' && (
                     <>
                       <button
                         onClick={() => handleEditAssignment(assignment)}

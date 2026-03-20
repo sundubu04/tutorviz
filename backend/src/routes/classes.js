@@ -15,7 +15,7 @@ router.get('/', authenticateToken, async (req, res) => {
     
     let classes = [];
 
-    if (userRole === 'teacher') {
+    if (userRole === 'teacher' || userRole === 'admin') {
       // Teachers see classes they teach
       classes = await prisma.class.findMany({
         where: {
@@ -54,46 +54,6 @@ router.get('/', authenticateToken, async (req, res) => {
         studentCount: cls.enrollments.length,
         assignmentCount: cls.assignments.length,
         type: 'teaching',
-        createdAt: cls.createdAt
-      }));
-    } else if (userRole === 'admin') {
-      // Admin can access both "student" and "teacher" views.
-      // We return all classes, and label them as "teaching" when the admin is the teacher,
-      // otherwise as "enrolled" so they show up under both UI tabs.
-      const allClasses = await prisma.class.findMany({
-        include: {
-          teacher: {
-            select: {
-              firstName: true,
-              lastName: true
-            }
-          },
-          enrollments: {
-            select: {
-              studentId: true
-            }
-          },
-          assignments: {
-            select: {
-              id: true
-            }
-          }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      });
-
-      classes = allClasses.map((cls) => ({
-        id: cls.id,
-        name: cls.name,
-        description: cls.description,
-        iconName: cls.iconName,
-        iconColor: cls.iconColor,
-        teacherName: `${cls.teacher.firstName} ${cls.teacher.lastName}`,
-        studentCount: cls.enrollments.length,
-        assignmentCount: cls.assignments.length,
-        type: cls.teacherId === userId ? 'teaching' : 'enrolled',
         createdAt: cls.createdAt
       }));
     } else {
@@ -163,7 +123,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     // Check if user has access to this class
     let hasAccess = false;
 
-    if (req.user.role === 'teacher') {
+    if (req.user.role === 'teacher' || req.user.role === 'admin') {
       const teacherClass = await prisma.class.findFirst({
         where: {
           id: id,
@@ -171,8 +131,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
         }
       });
       hasAccess = !!teacherClass;
-    } else if (req.user.role === 'admin') {
-      hasAccess = true;
     } else {
       const enrollment = await prisma.classEnrollment.findFirst({
         where: {

@@ -80,8 +80,8 @@ export class ClassesService {
       return { canAccess: false, message: 'You must be logged in to access this feature.' };
     }
     
-    if (userRole !== 'teacher' && userRole !== 'admin') {
-      return { canAccess: false, message: 'Only teachers/admins can access this feature. Please log in with a teacher or administrator account.' };
+    if (userRole !== 'teacher') {
+      return { canAccess: false, message: 'Only teachers can access this feature. Please log in with a teacher account.' };
     }
     
     return { canAccess: true };

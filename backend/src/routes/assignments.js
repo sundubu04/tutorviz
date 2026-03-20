@@ -240,10 +240,17 @@ router.get('/', authenticateToken, async (req, res) => {
 
       where = { classId: { in: classIds } };
     } else if (req.user.role === 'admin') {
-      // Admins can view both "student" and "teacher" experiences.
-      // For now we show all assignments; submission status is derived (if any)
-      // from assignment_submissions for the current admin id.
-      where = {};
+      // Admins should only see assignments for classes they teach.
+      const classes = await prisma.class.findMany({
+        where: { teacherId: req.user.id },
+        select: { id: true }
+      });
+      const classIds = classes.map((c) => c.id);
+      if (classIds.length === 0) {
+        return res.json({ assignments: [] });
+      }
+
+      where = { classId: { in: classIds } };
     }
 
     const result = await prisma.assignment.findMany({
