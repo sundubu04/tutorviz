@@ -94,26 +94,47 @@ router.get('/test', async (req, res) => {
 
 // Helper function to map database row to assignment object
 const mapAssignmentRow = (row) => {
-  console.log('Mapping database row:', row);
-  
-  const mapped = {
+  if (!row) return null;
+
+  // This route mixes legacy raw-SQL shapes (snake_case) with Prisma objects (camelCase).
+  // Normalize to the shape expected by the frontend.
+  const dueDateValue = row.dueDate ?? row.due_date ?? null;
+  const createdAtValue = row.createdAt ?? row.created_at ?? null;
+  const submittedAtValue = row.submittedAt ?? row.submitted_at ?? null;
+
+  const className =
+    row.className ??
+    row.class_name ??
+    row.class?.name ??
+    null;
+
+  const classId =
+    row.classId ??
+    row.class_id ??
+    row.class?.id ??
+    null;
+
+  const submissionCount =
+    row.submissionCount ??
+    row.submission_count ??
+    row._count?.submissions ??
+    null;
+
+  return {
     id: row.id,
     title: row.title,
     description: row.description,
-    dueDate: row.due_date ? new Date(row.due_date).toISOString() : null,
+    dueDate: dueDateValue ? new Date(dueDateValue).toISOString() : null,
     priority: row.priority,
     topic: row.topic,
-    className: row.class_name,
-    classId: row.class_id,
-    submissionCount: row.submission_count,
-    submissionId: row.submission_id,
-    submittedAt: row.submitted_at,
+    className,
+    classId,
+    submissionCount,
+    submissionId: row.submissionId ?? row.submission_id ?? null,
+    submittedAt: submittedAtValue ? new Date(submittedAtValue).toISOString() : null,
     grade: row.grade,
-    createdAt: row.created_at
+    createdAt: createdAtValue ? new Date(createdAtValue).toISOString() : null
   };
-  
-  console.log('Mapped result:', mapped);
-  return mapped;
 };
 
 // Helper function to create calendar event for assignment
@@ -184,22 +205,13 @@ const handleStudentAssignments = async (client, assignmentId, classId, assignedS
     throw new Error('Some students are not enrolled in this class');
   }
 
-  // Remove existing assignments
-  await client.assignmentStudentAssignment.deleteMany({
-    where: {
-      assignmentId: assignmentId,
-    },
-  });
-
-  // Insert new assignments
-  for (const studentId of assignedStudents) {
-    await client.assignmentStudentAssignment.create({
-      data: {
-        assignmentId: assignmentId,
-        studentId: studentId,
-      },
-    });
-  }
+  // NOTE:
+  // Your Prisma schema does not currently include a join table/model for
+  // "assignment -> assigned students". Student work is represented by
+  // `AssignmentSubmission` which is created when a student submits.
+  //
+  // So we only validate that selected students belong to the class, and we
+  // intentionally do not create any submission/placeholder records here.
 };
 
 // Get all assignments for current user
@@ -467,48 +479,34 @@ router.post('/', authenticateToken, requireRole(['teacher']), [
       });
     }
 
-    const client = prisma;
-    try {
-      await client.$transaction(async (tx) => {
-
-      // Create the assignment
-      const result = await client.assignment.create({
+    const createdAssignment = await prisma.$transaction(async (tx) => {
+      const result = await tx.assignment.create({
         data: {
-          title: title,
-          description: description,
-          classId: classId,
-          dueDate: dueDate,
+          title,
+          description: description ?? null,
+          classId,
+          dueDate: new Date(dueDate),
           priority: priority || 'normal',
-          topic: topic,
-          createdBy: req.user.id,
-        },
+          topic: topic ?? null,
+          createdBy: req.user.id
+        }
       });
 
-      const newAssignment = result;
-      console.log('Assignment created:', newAssignment);
+      // Validate assigned students belong to the class.
+      // Note: schema currently doesn't support persisting "assigned students" subset.
+      await handleStudentAssignments(tx, result.id, classId, assignedStudents);
 
-      // Handle student assignments
-      await handleStudentAssignments(client, newAssignment.id, classId, assignedStudents);
+      // Create calendar event.
+      await createCalendarEvent(tx, result, classId, req.user.id);
 
-      // Create calendar event
-      const calendarEventId = await createCalendarEvent(client, newAssignment, classId, req.user.id);
-      console.log('Calendar event created with ID:', calendarEventId);
+      return result;
+    });
 
-      });
-
-      const responseAssignment = mapAssignmentRow(newAssignment);
-      console.log('Sending response:', responseAssignment);
-
-      res.status(201).json({
-        message: 'Assignment created successfully',
-        assignment: responseAssignment
-      });
-    } catch (error) {
-      console.error('Error in transaction:', error);
-      throw error;
-    } finally {
-      // No explicit client.release() needed for Prisma
-    }
+    const responseAssignment = mapAssignmentRow(createdAssignment);
+    res.status(201).json({
+      message: 'Assignment created successfully',
+      assignment: responseAssignment
+    });
   } catch (error) {
     console.error('Error creating assignment:', error);
     res.status(500).json({ 
