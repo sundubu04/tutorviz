@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { apiClient, Class } from '../../../utils/apiClient';
-import { ICONS, type IconName } from '../../../utils/iconMapper';
 import { Button } from '../../../components/ui';
 
 interface ClassModalProps {
@@ -14,34 +13,10 @@ interface ClassModalProps {
 const ClassModal: React.FC<ClassModalProps> = ({ isOpen, classData, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: '',
-    description: '',
-    iconName: 'BookOpen',
-    iconColor: 'bg-blue-500'
+    description: ''
   });
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const iconOptions = Object.entries(ICONS).map(([name, icon], index) => {
-    const colors = [
-      'bg-blue-500', 'bg-orange-500', 'bg-purple-500', 'bg-green-500', 
-      'bg-indigo-500', 'bg-red-500', 'bg-teal-500', 'bg-yellow-500',
-      'bg-pink-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-rose-500',
-      'bg-amber-500', 'bg-violet-500', 'bg-slate-500'
-    ];
-    return {
-      name: name as IconName,
-      icon,
-      color: colors[index % colors.length]
-    };
-  });
-
-  // Color options for icon selection
-  const colorOptions = [
-    'bg-blue-500', 'bg-orange-500', 'bg-purple-500', 'bg-green-500', 
-    'bg-indigo-500', 'bg-red-500', 'bg-teal-500', 'bg-yellow-500',
-    'bg-pink-500', 'bg-emerald-500', 'bg-cyan-500', 'bg-rose-500',
-    'bg-amber-500', 'bg-violet-500', 'bg-slate-500'
-  ];
 
   useEffect(() => {
     if (isOpen) {
@@ -49,17 +24,13 @@ const ClassModal: React.FC<ClassModalProps> = ({ isOpen, classData, onClose, onS
         // Edit mode
         setFormData({
           name: classData.name,
-          description: classData.description,
-          iconName: classData.iconName,
-          iconColor: classData.iconColor
+          description: classData.description || ''
         });
       } else {
         // Add mode
         setFormData({
           name: '',
-          description: '',
-          iconName: 'BookOpen',
-          iconColor: 'bg-blue-500'
+          description: ''
         });
       }
       setErrors({});
@@ -196,52 +167,6 @@ const ClassModal: React.FC<ClassModalProps> = ({ isOpen, classData, onClose, onS
             {errors.description && (
               <p className="mt-1 text-sm text-red-600">{errors.description}</p>
             )}
-          </div>
-
-          {/* Icon Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Choose Icon
-            </label>
-            <div className="grid grid-cols-5 gap-3">
-              {iconOptions.map((option) => (
-                <button
-                  key={option.name}
-                  type="button"
-                  onClick={() => handleInputChange('iconName', option.name)}
-                  className={`p-3 rounded-lg border-2 transition-all ${
-                    formData.iconName === option.name
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className={`w-8 h-8 ${option.color} rounded-lg flex items-center justify-center`}>
-                    <option.icon className="w-5 h-5 text-white" />
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Color Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Choose Color
-            </label>
-            <div className="grid grid-cols-5 gap-3">
-              {colorOptions.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => handleInputChange('iconColor', color)}
-                  className={`w-10 h-10 rounded-lg border-2 transition-all ${
-                    formData.iconColor === color
-                      ? 'border-blue-500 ring-2 ring-blue-200'
-                      : 'border-gray-200 hover:border-gray-300'
-                  } ${color}`}
-                />
-              ))}
-            </div>
           </div>
 
           {/* Error Message */}
