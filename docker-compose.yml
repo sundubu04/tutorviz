@@ -8,26 +8,20 @@ services:
     environment:
       NODE_ENV: development
       PORT: 5001
-     
-      # Database connection
-      # When running inside Docker, `127.0.0.1` points to the container itself.
-      # Use `host.docker.internal` to reach Supabase running on the host.
-      DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:54322/postgres
-      DIRECT_URL: postgresql://postgres:postgres@host.docker.internal:54322/postgres
-      
-      # Supabase Auth
-      SUPABASE_URL: http://host.docker.internal:54321
+      # Override via repo-root `.env` (e.g. hosted Supabase). Defaults match local `supabase start`.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
+      DIRECT_URL: ${DIRECT_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
+      SUPABASE_URL: ${SUPABASE_URL:-http://host.docker.internal:54321}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-
-      CORS_ORIGIN: http://localhost:3000
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_MODEL: ${OPENAI_MODEL}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       # File watching optimizations
       CHOKIDAR_USEPOLLING: true
       WATCHPACK_POLLING: true
     ports:
-      - "5001:5001"
+      - "${BACKEND_PUBLISH_PORT:-5001}:5001"
     volumes:
       - ./backend:/app
       - /app/node_modules
@@ -47,14 +41,13 @@ services:
       dockerfile: Dockerfile.dev
     container_name: tutorviz-frontend-dev
     environment:
-      # File watching optimizations for React
-      - CHOKIDAR_USEPOLLING=true
-      - CHOKIDAR_INTERVAL=1000
-      - WATCHPACK_POLLING=true
-      - FAST_REFRESH=true
-      - REACT_APP_API_URL=http://localhost:5001
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
+      WATCHPACK_POLLING: "true"
+      FAST_REFRESH: "true"
+      REACT_APP_API_BASE: ${REACT_APP_API_BASE:-http://localhost:5001/api}
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PUBLISH_PORT:-3000}:3000"
     volumes:
       - .:/app
       - /app/frontend/node_modules

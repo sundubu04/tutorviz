@@ -1,8 +1,6 @@
 # Production stack: nginx (SPA + /api proxy) + Express API.
-# Create a .env next to this file on the server (never commit) with at least:
-#   DATABASE_URL, DIRECT_URL (Supabase: pooler + direct), SUPABASE_URL, SUPABASE_ANON_KEY,
-#   SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY), CORS_ORIGIN, OPENAI_API_KEY, etc.
-# See docs/DEPLOY.md
+# Create a .env next to this file on the server (never commit). Compose loads it for `env_file`
+# and for variable substitution below. See docs/DEPLOY.md
 
 services:
   backend:
@@ -27,10 +25,10 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        REACT_APP_API_BASE: /api
+        REACT_APP_API_BASE: ${REACT_APP_API_BASE:-/api}
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "${FRONTEND_HTTP_PORT:-80}:80"
     depends_on:
       - backend
     networks:
