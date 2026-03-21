@@ -250,12 +250,12 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
   return (
     <div className="calendar-container">
       {/* Calendar Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-4">
-          <h2 className="text-2xl font-bold text-gray-900">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:space-x-4 sm:gap-0">
+          <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">
             {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
           </h2>
-          <div className="flex space-x-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -279,19 +279,23 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
             </Button>
           </div>
         </div>
-        
-        <Button onClick={handleCreateEvent} className="flex items-center space-x-2">
-          <Plus className="w-4 h-4" />
+
+        <Button onClick={handleCreateEvent} className="flex w-full items-center justify-center space-x-2 sm:w-auto">
+          <Plus className="h-4 w-4" />
           <span>Add Event</span>
         </Button>
       </div>
 
-      {/* Calendar Grid */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* Calendar Grid — horizontal scroll on very narrow viewports */}
+      <div className="overflow-x-auto rounded-lg bg-white shadow">
+        <div className="min-w-[560px]">
         {/* Day Headers */}
-        <div className="grid grid-cols-7 bg-gray-50 border-b">
+        <div className="grid grid-cols-7 border-b bg-gray-50">
           {dayNames.map(day => (
-            <div key={day} className="px-3 py-2 text-center text-sm font-medium text-gray-500">
+            <div
+              key={day}
+              className="calendar-day-header px-3 py-2 text-center text-sm font-medium text-gray-500"
+            >
               {day}
             </div>
           ))}
@@ -308,7 +312,7 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
             return (
               <div
                 key={index}
-                className={`min-h-[120px] p-2 border-r border-b border-gray-200 ${
+                className={`calendar-day-cell min-h-[120px] border-b border-r border-gray-200 p-2 ${
                   !day ? 'bg-gray-50' : 'bg-white'
                 } ${isToday ? 'bg-blue-50' : ''}`}
               >
@@ -348,6 +352,7 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
               </div>
             );
           })}
+        </div>
         </div>
       </div>
 

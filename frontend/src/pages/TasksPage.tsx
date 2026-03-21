@@ -199,22 +199,26 @@ const TasksPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header with back button */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={handleBackToDashboard}
-            className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            <span>Back to Dashboard</span>
-          </button>
-          <div className="h-6 w-px bg-gray-300"></div>
-          <h1 className="text-2xl font-bold text-gray-900">TaskMaker</h1>
+      <header className="border-b border-gray-200 bg-white px-4 py-3 sm:px-6 sm:py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <button
+              type="button"
+              onClick={handleBackToDashboard}
+              aria-label="Back to dashboard"
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 sm:px-4"
+            >
+              <ArrowLeft className="h-5 w-5 flex-shrink-0" />
+              <span className="hidden sm:inline">Back to Dashboard</span>
+            </button>
+            <div className="hidden h-6 w-px bg-gray-300 sm:block" />
+            <h1 className="truncate text-xl font-bold text-gray-900 sm:text-2xl">TaskMaker</h1>
+          </div>
         </div>
       </header>
 
       {/* Main Content - Google Docs Style */}
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-4 sm:p-6">
         <div className="max-w-6xl mx-auto">
           {/* Top Section */}
           <div className="mb-8"></div>
@@ -255,7 +259,7 @@ const TasksPage: React.FC = () => {
                           </p>
                         </div>
                         <button
-                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100 transition-all"
+                          className="rounded p-1 opacity-100 transition-all hover:bg-gray-100 md:opacity-0 md:group-hover:opacity-100"
                           onClick={(e) => {
                             e.stopPropagation();
                             setOpenMenuTaskId((prev) => (prev === task.id ? null : task.id));

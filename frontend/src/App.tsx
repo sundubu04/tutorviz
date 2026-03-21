@@ -28,7 +28,10 @@ import { type Class, type TodoItem } from './types';
 import { classesService } from './services';
 import { type Class as ApiClass } from './utils/apiClient';
 import AdminVerification from './pages/AdminVerification';
+import { useMediaQuery } from './hooks/useMediaQuery';
 import './App.css';
+
+const MOBILE_NAV_MEDIA = '(max-width: 1024px)';
 
 const baseMenuItems = [
   { id: 'classes', label: 'Classes', icon: <BookOpen className="w-5 h-5" /> },
@@ -59,6 +62,22 @@ function Dashboard() {
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ApiClass | null>(null);
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0); // Key to force calendar refresh
+
+  const isMobileNavLayout = useMediaQuery(MOBILE_NAV_MEDIA);
+
+  useEffect(() => {
+    if (!isMobileNavLayout) {
+      setIsMobileMenuOpen(false);
+    }
+  }, [isMobileNavLayout]);
+
+  const handleNavToggle = () => {
+    if (isMobileNavLayout) {
+      setIsMobileMenuOpen((open) => !open);
+    } else {
+      setIsSidebarOpen((open) => !open);
+    }
+  };
 
   // Fetch classes and assignments
   const fetchData = async () => {
@@ -256,7 +275,7 @@ function Dashboard() {
           userName={`${user?.firstName} ${user?.lastName}`}
           userRole={user?.role}
           isAuthenticated={apiClient.isAuthenticated()}
-          onSidebarToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+          onSidebarToggle={handleNavToggle}
         />
         
         <div className="content-area">
