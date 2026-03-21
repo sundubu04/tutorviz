@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
-  Filter, 
   Search, 
   Calendar, 
   FileText, 
@@ -11,10 +10,9 @@ import {
   CheckCircle,
   Edit,
   Trash2,
-  Download,
   Eye
 } from 'lucide-react';
-import { apiClient, type Class as ApiClass } from '../../../utils/apiClient';
+import { apiClient } from '../../../utils/apiClient';
 import { type Assignment, type Class } from '../../../types';
 import AssignmentModal from './AssignmentModal';
 import { Button } from '../../../components/ui';

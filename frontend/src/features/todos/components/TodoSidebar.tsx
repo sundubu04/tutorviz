@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, CheckCircle, Circle, Clock, BookOpen, Move } from 'lucide-react';
 import { type TodoItem } from '../../../types';
 
@@ -134,27 +134,28 @@ const TodoSidebar: React.FC<TodoSidebarProps> = ({
     e.preventDefault();
   };
 
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging) return;
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isDragging) return;
 
-    const newX = e.clientX - dragOffset.x;
-    const newY = e.clientY - dragOffset.y;
+      const newX = e.clientX - dragOffset.x;
+      const newY = e.clientY - dragOffset.y;
 
-    // Get viewport dimensions
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const buttonSize = 64; // 4 * 16 (p-4 = 16px padding)
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const buttonSize = 64;
 
-    // Constrain button to viewport bounds
-    const constrainedX = Math.max(0, Math.min(newX, viewportWidth - buttonSize));
-    const constrainedY = Math.max(0, Math.min(newY, viewportHeight - buttonSize));
+      const constrainedX = Math.max(0, Math.min(newX, viewportWidth - buttonSize));
+      const constrainedY = Math.max(0, Math.min(newY, viewportHeight - buttonSize));
 
-    setButtonPosition({ x: constrainedX, y: constrainedY });
-  };
+      setButtonPosition({ x: constrainedX, y: constrainedY });
+    },
+    [isDragging, dragOffset]
+  );
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     setIsDragging(false);
-  };
+  }, []);
 
   const handleClick = (e: React.MouseEvent) => {
     // Only toggle if we weren't dragging
@@ -174,7 +175,7 @@ const TodoSidebar: React.FC<TodoSidebarProps> = ({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDragging, dragOffset]);
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
   const urgentTodos = todos.filter(todo => todo.urgent);
   const completedTodos = todos.filter(todo => todo.completed);

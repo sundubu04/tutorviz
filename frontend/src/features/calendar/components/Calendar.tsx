@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Plus, Edit, Trash2, Clock, MapPin } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus } from 'lucide-react';
 import { apiClient, CalendarEvent } from '../../../utils/apiClient';
 import EventModal from './EventModal';
 import EventDetailModal from './EventDetailModal';
@@ -37,11 +37,7 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
     calendarDays.push(day);
   }
 
-  useEffect(() => {
-    fetchEvents();
-  }, [currentDate, refreshKey]);
-
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -66,7 +62,11 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentDate]);
+
+  useEffect(() => {
+    void fetchEvents();
+  }, [fetchEvents, refreshKey]);
 
   const handleCreateEvent = () => {
     setSelectedEvent(null); // Clear any selected event
@@ -140,70 +140,6 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
       case 'meeting': return 'bg-green-100 text-green-800 border-green-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
-  };
-
-  const getSubjectLabel = (subjectValue: string) => {
-    const subjects = [
-      // Group 1: Studies in Language and Literature
-      { value: 'english-a-hl', label: 'English A: Literature HL' },
-      { value: 'english-a-sl', label: 'English A: Literature SL' },
-      { value: 'english-b-hl', label: 'English B HL' },
-      { value: 'english-b-sl', label: 'English B SL' },
-      
-      // Group 2: Language Acquisition
-      { value: 'spanish-b-hl', label: 'Spanish B HL' },
-      { value: 'spanish-b-sl', label: 'Spanish B SL' },
-      { value: 'french-b-hl', label: 'French B HL' },
-      { value: 'french-b-sl', label: 'French B SL' },
-      { value: 'mandarin-b-hl', label: 'Mandarin B HL' },
-      { value: 'mandarin-b-sl', label: 'Mandarin B SL' },
-      
-      // Group 3: Individuals and Societies
-      { value: 'history-hl', label: 'History HL' },
-      { value: 'history-sl', label: 'History SL' },
-      { value: 'economics-hl', label: 'Economics HL' },
-      { value: 'economics-sl', label: 'Economics SL' },
-      { value: 'geography-hl', label: 'Geography HL' },
-      { value: 'geography-sl', label: 'Geography SL' },
-      { value: 'psychology-hl', label: 'Psychology HL' },
-      { value: 'psychology-sl', label: 'Psychology SL' },
-      { value: 'business-hl', label: 'Business Management HL' },
-      { value: 'business-sl', label: 'Business Management SL' },
-      
-      // Group 4: Sciences
-      { value: 'biology-hl', label: 'Biology HL' },
-      { value: 'biology-sl', label: 'Biology SL' },
-      { value: 'chemistry-hl', label: 'Chemistry HL' },
-      { value: 'chemistry-sl', label: 'Chemistry SL' },
-      { value: 'physics-hl', label: 'Physics HL' },
-      { value: 'physics-sl', label: 'Physics SL' },
-      { value: 'computer-science-hl', label: 'Computer Science HL' },
-      { value: 'computer-science-sl', label: 'Computer Science SL' },
-      { value: 'environmental-systems-hl', label: 'Environmental Systems HL' },
-      { value: 'environmental-systems-sl', label: 'Environmental Systems SL' },
-      
-      // Group 5: Mathematics
-      { value: 'mathematics-aa-hl', label: 'Mathematics: Analysis and Approaches HL' },
-      { value: 'mathematics-aa-sl', label: 'Mathematics: Analysis and Approaches SL' },
-      { value: 'mathematics-ai-hl', label: 'Mathematics: Applications and Interpretation HL' },
-      { value: 'mathematics-ai-sl', label: 'Mathematics: Applications and Interpretation SL' },
-      
-      // Group 6: The Arts
-      { value: 'visual-arts-hl', label: 'Visual Arts HL' },
-      { value: 'visual-arts-sl', label: 'Visual Arts SL' },
-      { value: 'music-hl', label: 'Music HL' },
-      { value: 'music-sl', label: 'Music SL' },
-      { value: 'theatre-hl', label: 'Theatre HL' },
-      { value: 'theatre-sl', label: 'Theatre SL' },
-      
-      // Core Components
-      { value: 'tok', label: 'Theory of Knowledge (TOK)' },
-      { value: 'cas', label: 'Creativity, Activity, Service (CAS)' },
-      { value: 'ee', label: 'Extended Essay (EE)' }
-    ];
-    
-    const subject = subjects.find(s => s.value === subjectValue);
-    return subject ? subject.label : subjectValue;
   };
 
   const formatTime = (dateString: string) => {

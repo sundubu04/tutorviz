@@ -4,14 +4,11 @@ import {
   Upload, 
   File, 
   Calendar, 
-  Users, 
   Tag,
-  AlertTriangle,
-  Plus,
   Trash2
 } from 'lucide-react';
-import { apiClient, type Class as ApiClass } from '../../../utils/apiClient';
-import { type Assignment, type Class, type Student, type CreateAssignmentData } from '../../../types';
+import { apiClient } from '../../../utils/apiClient';
+import { type Assignment, type Class, type Student } from '../../../types';
 import { Button } from '../../../components/ui';
 
 interface AssignmentModalProps {
@@ -106,7 +103,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({
       }
       setErrors({});
     }
-  }, [isOpen, assignment]);
+  }, [isOpen, assignment, isEditing]);
 
   useEffect(() => {
     if (formData.classId) {
