@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { getApiBase } from "../config/api";
 
 export function useLatexPdf() {
   const [status, setStatus] = useState<
@@ -13,7 +14,7 @@ export function useLatexPdf() {
     try {
       console.log("Starting LaTeX compilation...", { jobname, latexLength: latex.length });
       
-      const res = await fetch("http://localhost:5001/api/latex/compile", {
+      const res = await fetch(`${getApiBase()}/latex/compile`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ latex, jobname }),

@@ -1,6 +1,8 @@
 // API Client for TutoriAI Frontend
 // This client handles all communication with the backend API
 
+import { getApiBase } from '../config/api';
+
 export interface User {
   id: string;
   email: string;
@@ -87,7 +89,7 @@ class ApiClient {
   private baseURL: string;
   private token: string | null;
 
-  constructor(baseURL: string = 'http://localhost:5001/api') {
+  constructor(baseURL: string = getApiBase()) {
     this.baseURL = baseURL;
     this.token = localStorage.getItem('authToken');
   }

@@ -11,6 +11,11 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# prisma generate only needs valid env placeholders (runtime uses real .env from compose)
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
+ENV DIRECT_URL="postgresql://build:build@127.0.0.1:5432/build"
+RUN npx prisma generate
+
 # Create uploads directory
 RUN mkdir -p uploads
 
