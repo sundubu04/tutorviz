@@ -12,6 +12,14 @@ router.get('/config', (req, res) => {
   // If the backend is configured with a Docker-only hostname, rewrite it for the browser.
   const supabaseUrl = supabaseUrlRaw.replace('host.docker.internal', 'localhost');
 
+  const siteUrl = (
+    process.env.PUBLIC_APP_URL ||
+    process.env.CORS_ORIGIN ||
+    ''
+  )
+    .trim()
+    .replace(/\/$/, '');
+
   if (!supabaseUrl || !anonKey) {
     return res.status(500).json({
       error: 'Supabase config missing',
@@ -19,7 +27,7 @@ router.get('/config', (req, res) => {
     });
   }
 
-  res.json({ url: supabaseUrl, anonKey });
+  res.json({ url: supabaseUrl, anonKey, siteUrl: siteUrl || undefined });
 });
 
 module.exports = router;

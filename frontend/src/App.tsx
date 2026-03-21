@@ -7,7 +7,10 @@ import { Assignments } from './features/assignments';
 import { TodoSidebar } from './features/todos';
 import TasksPage from './pages/TasksPage';
 import TaskEditor from './pages/TaskEditor';
-import { AuthWrapper } from './features/auth';
+import RequireVerifiedUser from './features/auth/components/RequireVerifiedUser';
+import LoginPage from './features/auth/pages/LoginPage';
+import RegisterPage from './features/auth/pages/RegisterPage';
+import PendingPage from './features/auth/pages/PendingPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 // TaskProvider removed
 import { 
@@ -281,16 +284,20 @@ function Dashboard() {
 function App() {
   return (
     <AuthProvider>
-              <Router>
-          <AuthWrapper>
-            <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/tasks" element={<TasksPage />} />
-              <Route path="/task-editor/:taskId" element={<TaskEditor />} />
-            </Routes>
-          </AuthWrapper>
-        </Router>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/pending" element={<PendingPage />} />
+          <Route element={<RequireVerifiedUser />}>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/task-editor/:taskId" element={<TaskEditor />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </Router>
     </AuthProvider>
   );
 }

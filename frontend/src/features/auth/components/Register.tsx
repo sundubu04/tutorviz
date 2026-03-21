@@ -9,17 +9,19 @@ interface RegisterProps {
     firstName: string;
     lastName: string;
     role: 'student' | 'teacher';
-  }) => void;
+  }) => void | Promise<void>;
   onSwitchToLogin: () => void;
   isLoading?: boolean;
   error?: string | null;
+  clearError?: () => void;
 }
 
-const Register: React.FC<RegisterProps> = ({ 
-  onRegister, 
-  onSwitchToLogin, 
-  isLoading = false, 
-  error 
+const Register: React.FC<RegisterProps> = ({
+  onRegister,
+  onSwitchToLogin,
+  isLoading = false,
+  error,
+  clearError
 }) => {
   const [formData, setFormData] = useState({
     email: '',
@@ -41,7 +43,7 @@ const Register: React.FC<RegisterProps> = ({
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
+    clearError?.();
     if (formErrors[field as keyof typeof formErrors]) {
       setFormErrors(prev => ({ ...prev, [field]: undefined }));
     }
@@ -80,17 +82,22 @@ const Register: React.FC<RegisterProps> = ({
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (validateForm()) {
-      onRegister({
-        email: formData.email,
-        password: formData.password,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        role: formData.role
-      });
+
+    if (!validateForm()) return;
+    try {
+      await Promise.resolve(
+        onRegister({
+          email: formData.email,
+          password: formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          role: formData.role
+        })
+      );
+    } catch {
+      // Error message is set on AuthContext
     }
   };
 

@@ -1,16 +1,23 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { getBackendOriginForConfig } from '../config/api';
+import { getBackendOriginForConfig, getPublicAppOriginFromEnv } from '../config/api';
 import { apiClient, User, RegisterData } from '../utils/apiClient';
+
+export type RegisterResult = { needsEmailConfirmation: boolean };
 
 interface AuthContextType {
   user: User | null;
+  /** True during initial session restore or while login/register requests are in flight. */
   isLoading: boolean;
+  /** True only until the first session check on app load has finished (not toggled by login/register). */
+  sessionResolved: boolean;
   error: string | null;
+  awaitingEmailConfirmation: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (userData: RegisterData) => Promise<void>;
+  register: (userData: RegisterData) => Promise<RegisterResult>;
   logout: () => void;
   clearError: () => void;
+  clearAwaitingEmailConfirmation: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,10 +29,13 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionResolved, setSessionResolved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [awaitingEmailConfirmation, setAwaitingEmailConfirmation] = useState(false);
   const supabaseRef = useRef<SupabaseClient | null>(null);
   const supabaseInitPromiseRef = useRef<Promise<SupabaseClient> | null>(null);
   const authSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const supabaseSiteUrlRef = useRef<string | null>(null);
 
   const initSupabaseClient = async (): Promise<SupabaseClient> => {
     if (supabaseRef.current) return supabaseRef.current;
@@ -50,10 +60,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         );
       }
 
-      const { url, anonKey } = await configRes.json();
+      const { url, anonKey, siteUrl } = await configRes.json();
       if (!url || !anonKey) {
         throw new Error('Supabase config missing url or anonKey');
       }
+
+      const normalizedSite =
+        typeof siteUrl === 'string' ? siteUrl.trim().replace(/\/$/, '') : '';
+      supabaseSiteUrlRef.current = normalizedSite || null;
 
       const supabase = createClient(url, anonKey);
       supabaseRef.current = supabase;
@@ -76,8 +90,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.access_token) {
         apiClient.setToken(session.access_token);
-        const { user } = await apiClient.getProfile();
-        setUser(user);
+        const { user: nextUser } = await apiClient.getProfile();
+        setUser(nextUser);
       } else {
         apiClient.logout();
         setUser(null);
@@ -87,7 +101,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     authSubscriptionRef.current = { unsubscribe: subscription.unsubscribe };
   };
 
-  // Check if user is already authenticated on app load
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -97,7 +110,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const supabase = await initSupabaseClient();
         supabaseRef.current = supabase;
 
-        // Restore existing session (and therefore access token).
         const {
           data: { session }
         } = await supabase.auth.getSession();
@@ -106,19 +118,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         if (session?.access_token) {
           apiClient.setToken(session.access_token);
-          const { user } = await apiClient.getProfile();
-          setUser(user);
+          const { user: profileUser } = await apiClient.getProfile();
+          setUser(profileUser);
         } else {
           apiClient.logout();
           setUser(null);
         }
-      } catch (error) {
-        console.error('Auth check failed:', error);
-        // Clear invalid token
+      } catch (err) {
+        console.error('Auth check failed:', err);
         apiClient.logout();
         setUser(null);
 
-        const errorMessage = error instanceof Error ? error.message : 'Auth check failed';
+        const errorMessage = err instanceof Error ? err.message : 'Auth check failed';
         if (errorMessage.includes('Failed to load Supabase config') || errorMessage.includes('Supabase config')) {
           setError('Supabase is not reachable. Check backend `/api/supabase/config` and environment variables.');
         } else {
@@ -126,6 +137,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } finally {
         setIsLoading(false);
+        setSessionResolved(true);
       }
     };
 
@@ -141,6 +153,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setIsLoading(true);
       setError(null);
+      setAwaitingEmailConfirmation(false);
 
       const supabase = await initSupabaseClient();
       setupAuthStateSync(supabase);
@@ -160,11 +173,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       apiClient.setToken(session.access_token);
-      const { user } = await apiClient.getProfile();
-      setUser(user);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Login failed';
-      // Provide more user-friendly error messages
+      const { user: profileUser } = await apiClient.getProfile();
+      setUser(profileUser);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Login failed';
       let userFriendlyError = errorMessage;
       if (errorMessage.includes('Invalid credentials') || errorMessage.includes('Email or password is incorrect')) {
         userFriendlyError = 'Invalid email or password. Please try again.';
@@ -176,24 +188,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         userFriendlyError = 'Unable to sign in. Please try again later.';
       }
       setError(userFriendlyError);
-      throw error;
+      throw err;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const register = async (userData: RegisterData) => {
+  const register = async (userData: RegisterData): Promise<RegisterResult> => {
     try {
       setIsLoading(true);
       setError(null);
+      setAwaitingEmailConfirmation(false);
 
       const supabase = await initSupabaseClient();
       setupAuthStateSync(supabase);
+
+      const origin =
+        supabaseSiteUrlRef.current?.trim() || getPublicAppOriginFromEnv();
+      const emailRedirectTo = `${origin.replace(/\/$/, '')}/dashboard`;
 
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
         options: {
+          emailRedirectTo,
           data: {
             firstName: userData.firstName,
             lastName: userData.lastName,
@@ -206,21 +224,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error(signUpError.message);
       }
 
-      // If email confirmation is enabled in Supabase, `session` might be null.
       const session = data.session ?? (await supabase.auth.getSession()).data.session;
       if (!session?.access_token) {
         apiClient.logout();
         setUser(null);
-        setError('Account created. Please sign in to continue.');
-        return;
+        setAwaitingEmailConfirmation(true);
+        return { needsEmailConfirmation: true };
       }
 
       apiClient.setToken(session.access_token);
-      const { user } = await apiClient.getProfile();
-      setUser(user);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
-      // Provide more user-friendly error messages
+      const { user: profileUser } = await apiClient.getProfile();
+      setUser(profileUser);
+      return { needsEmailConfirmation: false };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Registration failed';
       let userFriendlyError = errorMessage;
       if (errorMessage.includes('User already exists') || errorMessage.includes('already exists')) {
         userFriendlyError = 'An account with this email already exists. Please sign in instead.';
@@ -232,7 +249,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         userFriendlyError = 'Unable to create account. Please try again later.';
       }
       setError(userFriendlyError);
-      throw error;
+      throw err;
     } finally {
       setIsLoading(false);
     }
@@ -245,23 +262,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     });
     setUser(null);
     setError(null);
+    setAwaitingEmailConfirmation(false);
   };
 
   const clearError = () => {
     setError(null);
   };
 
+  const clearAwaitingEmailConfirmation = () => {
+    setAwaitingEmailConfirmation(false);
+  };
+
   const value: AuthContextType = {
     user,
     isLoading,
+    sessionResolved,
     error,
+    awaitingEmailConfirmation,
     login,
     register,
     logout,
     clearError,
+    clearAwaitingEmailConfirmation
   };
-
-
 
   return (
     <AuthContext.Provider value={value}>
@@ -276,4 +299,4 @@ export const useAuth = (): AuthContextType => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-}; 
+};
