@@ -34,9 +34,9 @@ Add these **repository secrets** (Settings → Secrets and variables → Actions
 | `SUPABASE_ANON_KEY` | anon key |
 | `SUPABASE_SECRET_KEY` | service role key (server only) |
 
-On each push to **`main`**, the workflow SSHs in, **writes `.env` from those secrets**, `git pull`s, and runs:
+On each push to **`main`**, the workflow SSHs in, **writes `.env` from those secrets**, `git pull`s, **builds images**, runs **`npx prisma migrate deploy`** in a one-off backend container (uses **`DIRECT_URL`** from `.env`), then starts the stack with **`docker compose -f docker-compose.prod.yml up -d`**.
 
-`docker compose -f docker-compose.prod.yml up -d --build`
+You need committed migrations under `backend/prisma/migrations/` (create them locally with `npx prisma migrate dev`). If that folder is missing or empty, `migrate deploy` fails and the deploy stops.
 
 ## 4. Environment variables
 
@@ -85,15 +85,17 @@ In the [Supabase Dashboard](https://supabase.com/dashboard) → your project:
 
 ## 6. Database migrations
 
-After deploying schema changes, run migrations on the server (from the repo root, with `.env` loaded):
+**On each deploy**, the GitHub Action runs `prisma migrate deploy` on the VPS via Docker (after `git pull` and `docker compose … build`), using the same **`.env`** as the running app. Ensure **`DIRECT_URL`** is the Supabase **direct** Postgres URL (DDL), not the pooler-only URL.
+
+To add or change schema locally, use `npx prisma migrate dev` in `backend/`, commit `backend/prisma/migrations/`, and push to **`main`**.
+
+**Manual run** (debug or emergency), from the repo root on the server:
 
 ```bash
-cd /path/to/tutorviz/backend
-set -a && source ../.env && set +a   # or export vars manually
-npx prisma migrate deploy
+docker compose -f docker-compose.prod.yml run --rm --no-deps backend npx prisma migrate deploy
 ```
 
-Use a connection that supports DDL (your **`DIRECT_URL`** / direct Postgres URL). You can run this over SSH instead of storing DB credentials in GitHub Actions.
+Or with host Node: `cd backend && set -a && source ../.env && set +a && npx prisma migrate deploy`.
 
 ## 7. Verify
 
