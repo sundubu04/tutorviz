@@ -15,6 +15,12 @@ interface AuthContextType {
   awaitingEmailConfirmation: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (userData: RegisterData) => Promise<RegisterResult>;
+  /** After magic-link / email-confirm redirect: parse URL, set Supabase session, load API profile. */
+  refreshSessionFromEmailLink: () => Promise<{
+    ok: boolean;
+    message?: string;
+    user?: User | null;
+  }>;
   logout: () => void;
   clearError: () => void;
   clearAwaitingEmailConfirmation: () => void;
@@ -205,7 +211,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const origin =
         supabaseSiteUrlRef.current?.trim() || getPublicAppOriginFromEnv();
-      const emailRedirectTo = `${origin.replace(/\/$/, '')}/dashboard`;
+      const emailRedirectTo = `${origin.replace(/\/$/, '')}/auth/confirm`;
 
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: userData.email,
@@ -273,6 +279,63 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setAwaitingEmailConfirmation(false);
   };
 
+  const refreshSessionFromEmailLink = async (): Promise<{
+    ok: boolean;
+    message?: string;
+    user?: User | null;
+  }> => {
+    try {
+      const supabase = await initSupabaseClient();
+      supabaseRef.current = supabase;
+      setupAuthStateSync(supabase);
+
+      const url = new URL(window.location.href);
+      const qError = url.searchParams.get('error_description') || url.searchParams.get('error');
+      if (qError) {
+        return { ok: false, message: decodeURIComponent(qError.replace(/\+/g, ' ')) };
+      }
+
+      const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+      const hashError = hashParams.get('error_description') || hashParams.get('error');
+      if (hashError) {
+        return { ok: false, message: decodeURIComponent(hashError.replace(/\+/g, ' ')) };
+      }
+
+      const code = url.searchParams.get('code');
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
+          window.location.href
+        );
+        if (exchangeError) {
+          return { ok: false, message: exchangeError.message };
+        }
+      }
+
+      let session = (await supabase.auth.getSession()).data.session;
+      if (!session?.access_token) {
+        await new Promise((r) => setTimeout(r, 150));
+        session = (await supabase.auth.getSession()).data.session;
+      }
+
+      if (!session?.access_token) {
+        return {
+          ok: false,
+          message:
+            'Could not confirm your email from this link. It may have expired—request a new one or sign in.'
+        };
+      }
+
+      apiClient.setToken(session.access_token);
+      const { user: profileUser } = await apiClient.getProfile();
+      setUser(profileUser);
+      setAwaitingEmailConfirmation(false);
+      return { ok: true, user: profileUser };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Email confirmation failed';
+      return { ok: false, message: msg };
+    }
+  };
+
   const value: AuthContextType = {
     user,
     isLoading,
@@ -281,6 +344,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     awaitingEmailConfirmation,
     login,
     register,
+    refreshSessionFromEmailLink,
     logout,
     clearError,
     clearAwaitingEmailConfirmation
