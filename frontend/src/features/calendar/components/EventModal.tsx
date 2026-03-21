@@ -17,7 +17,7 @@ interface Class {
 }
 
 const EventModal: React.FC<EventModalProps> = ({ isOpen, event, onClose, onSave }) => {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, sessionResolved } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [classes, setClasses] = useState<Class[]>([]);
   const [formData, setFormData] = useState({
@@ -136,8 +136,7 @@ const EventModal: React.FC<EventModalProps> = ({ isOpen, event, onClose, onSave 
       e.preventDefault();
     }
 
-    // Check if auth is still loading
-    if (authLoading) {
+    if (!sessionResolved) {
       alert('Please wait while authentication is loading.');
       return;
     }

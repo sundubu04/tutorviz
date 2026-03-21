@@ -1,7 +1,6 @@
 const express = require('express');
-const { body, validationResult } = require('express-validator');
 const { PrismaClient } = require('@prisma/client');
-const { authenticateToken, requireRole, requireOwnership } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const { isUuid } = require('../utils/uuid');
 
 const router = express.Router();
@@ -25,51 +24,11 @@ const requireOwnedTask = async (taskId, userId) => {
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const { classId, taskType, difficultyLevel, tags, search } = req.query;
-    let query = `
-      SELECT t.*, u.first_name, u.last_name, c.name as class_name
-      FROM tasks t
-      JOIN users u ON t.created_by = u.id
-      LEFT JOIN classes c ON t.class_id = c.id
-      WHERE t.is_active = true
-    `;
-    const params = [];
-    let paramCount = 0;
-
-    if (classId) {
-      paramCount++;
-      query += ` AND t.class_id = $${paramCount}`;
-      params.push(classId);
-    }
-
-    if (taskType) {
-      paramCount++;
-      query += ` AND t.task_type = $${paramCount}`;
-      params.push(taskType);
-    }
-
-    if (difficultyLevel) {
-      paramCount++;
-      query += ` AND t.difficulty_level = $${paramCount}`;
-      params.push(difficultyLevel);
-    }
-
-    if (tags && tags.length > 0) {
-      paramCount++;
-      query += ` AND t.tags && $${paramCount}`;
-      params.push(tags);
-    }
-
-    if (search) {
-      paramCount++;
-      query += ` AND (t.title ILIKE $${paramCount} OR t.description ILIKE $${paramCount} OR t.content ILIKE $${paramCount})`;
-      params.push(`%${search}%`);
-    }
-
-    query += ` ORDER BY t.created_at DESC`;
 
     const result = await prisma.task.findMany({
       where: {
         isActive: true,
+        createdBy: req.user.id,
         ...(classId && { classId }),
         ...(taskType && { taskType }),
         ...(difficultyLevel && { difficultyLevel }),
@@ -103,13 +62,32 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// Must be registered before `GET /:id` so "stats" is not treated as a task id.
+router.get('/stats/overview', authenticateToken, async (req, res) => {
+  try {
+    const stats = await prisma.task.aggregate({
+      _count: {
+        id: true,
+      },
+      where: {
+        isActive: true,
+        createdBy: req.user.id,
+      },
+    });
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching task statistics:', error);
+    res.status(500).json({ error: 'Failed to fetch task statistics' });
+  }
+});
+
 // Get a single task by ID
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
     // Prisma expects UUIDs for the `id` field; handle non-UUID ids (e.g. demo-task) gracefully.
-    if (!isUuid) {
+    if (!isUuid(id)) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
@@ -132,6 +110,10 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     if (!task) {
       return res.status(404).json({ error: 'Task not found' });
+    }
+
+    if (task.createdBy !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     res.json(task);
@@ -191,17 +173,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const { title, description, content, taskType, difficultyLevel, estimatedTime, classId, tags, isActive } = req.body;
     const userId = req.user.id;
 
-    // Check if user owns the task or is a teacher
     const ownershipResult = await prisma.task.findUnique({
       where: { id },
       select: {
         createdBy: true,
         content: true,
-        creator: {
-          select: {
-            role: true,
-          },
-        },
       },
     });
 
@@ -210,7 +186,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     const task = ownershipResult;
-    if (task.createdBy !== userId && task.creator.role !== 'teacher' && req.user.role !== 'admin') {
+    if (task.createdBy !== userId) {
       return res.status(403).json({ error: 'Not authorized to update this task' });
     }
 
@@ -264,16 +240,10 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    // Check if user owns the task or is a teacher
     const ownershipResult = await prisma.task.findUnique({
       where: { id },
       select: {
         createdBy: true,
-        creator: {
-          select: {
-            role: true,
-          },
-        },
       },
     });
 
@@ -282,7 +252,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     }
 
     const task = ownershipResult;
-    if (task.createdBy !== userId && task.creator.role !== 'teacher' && req.user.role !== 'admin') {
+    if (task.createdBy !== userId) {
       return res.status(403).json({ error: 'Not authorized to delete this task' });
     }
 
@@ -593,24 +563,6 @@ router.delete('/:taskId/chat/messages/:messageId', authenticateToken, async (req
   } catch (error) {
     console.error('Error deleting task chat message:', error);
     res.status(500).json({ error: 'Failed to delete chat message' });
-  }
-});
-
-// Get task statistics
-router.get('/stats/overview', authenticateToken, async (req, res) => {
-  try {
-    const stats = await prisma.task.aggregate({
-      _count: {
-        id: true,
-      },
-      where: {
-        isActive: true,
-      },
-    });
-    res.json(stats);
-  } catch (error) {
-    console.error('Error fetching task statistics:', error);
-    res.status(500).json({ error: 'Failed to fetch task statistics' });
   }
 });
 

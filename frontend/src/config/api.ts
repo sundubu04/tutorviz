@@ -26,3 +26,11 @@ export function getBackendOriginForConfig(): string {
   }
   return '';
 }
+
+/** Public browser origin for Supabase emailRedirectTo; backend can override via /api/supabase/config `siteUrl`. */
+export function getPublicAppOriginFromEnv(): string {
+  const fromEnv = process.env.REACT_APP_SITE_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  if (typeof window !== 'undefined') return window.location.origin.replace(/\/$/, '');
+  return 'http://localhost:3000';
+}

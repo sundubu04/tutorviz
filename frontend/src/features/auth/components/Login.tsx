@@ -3,7 +3,7 @@ import { Eye, EyeOff, Mail, Lock, BookOpen, AlertCircle } from 'lucide-react';
 import { Button } from '../../../components/ui';
 
 interface LoginProps {
-  onLogin: (email: string, password: string) => void;
+  onLogin: (email: string, password: string) => void | Promise<void>;
   onSwitchToRegister: () => void;
   isLoading?: boolean;
   error?: string | null;
@@ -57,11 +57,14 @@ const Login: React.FC<LoginProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (validateForm()) {
-      onLogin(email, password);
+
+    if (!validateForm()) return;
+    try {
+      await Promise.resolve(onLogin(email, password));
+    } catch {
+      // Error message is set on AuthContext
     }
   };
 
