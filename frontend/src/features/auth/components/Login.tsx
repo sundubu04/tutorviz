@@ -198,15 +198,6 @@ const Login: React.FC<LoginProps> = ({
               </button>
             </p>
           </div>
-
-          {/* Demo Credentials */}
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-600 mb-2 font-medium">Demo Credentials:</p>
-            <div className="text-xs text-gray-500 space-y-1">
-              <p><strong>Teacher:</strong> teacher@example.com / demo123</p>
-              <p><strong>Student:</strong> student1@example.com / demo123</p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
