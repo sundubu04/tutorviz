@@ -11,6 +11,7 @@ import RequireVerifiedUser from './features/auth/components/RequireVerifiedUser'
 import LoginPage from './features/auth/pages/LoginPage';
 import RegisterPage from './features/auth/pages/RegisterPage';
 import PendingPage from './features/auth/pages/PendingPage';
+import EmailConfirmationPage from './features/auth/pages/EmailConfirmationPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 // TaskProvider removed
 import { 
@@ -289,6 +290,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/pending" element={<PendingPage />} />
+          <Route path="/auth/confirm" element={<EmailConfirmationPage />} />
           <Route element={<RequireVerifiedUser />}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
