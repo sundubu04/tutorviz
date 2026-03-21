@@ -144,7 +144,7 @@ The PostgreSQL database is automatically initialized with:
 
 ### Production (VPS + Supabase Cloud)
 
-See **[docs/DEPLOY.md](docs/DEPLOY.md)** for GitHub Actions deploy, server `.env`, Supabase dashboard settings, TLS, and Prisma migrations.
+See **[docs/DEPLOY.md](docs/DEPLOY.md)** for GitHub Actions deploy (per-variable secrets that write `.env` on the server each deploy), Supabase dashboard settings, TLS, and Prisma migrations.
 
 On the server:
 

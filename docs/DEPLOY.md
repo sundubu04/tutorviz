@@ -7,7 +7,7 @@ Production runs **your** containers (nginx + Express) on a VPS. **Postgres and A
 1. Rent a Linux VPS (Ubuntu LTS recommended), point **DNS** for `tutorviz.org` (and `www` if needed) to the server IP.
 2. Install [Docker Engine](https://docs.docker.com/engine/install/) and the [Compose plugin](https://docs.docker.com/compose/install/).
 3. Clone this repo (e.g. `/var/www/tutorviz`) and add a **deploy key** so the server can `git pull` from GitHub (read-only).
-4. In the repo root on the server, create **`.env`** (never commit). See [Environment variables](#environment-variables).
+4. **Environment on the server:** the deploy workflow writes **`.env`** from **individual GitHub Actions secrets** on every deploy (see below). You do not need a long-lived `.env` on disk unless you run Compose manually without Actions.
 
 ## 2. TLS (HTTPS)
 
@@ -25,14 +25,30 @@ Add these **repository secrets** (Settings → Secrets and variables → Actions
 | `SSH_USER` | SSH user (e.g. `deploy` or `root`) |
 | `SSH_PRIVATE_KEY` | Private key for that user (PEM, `ed25519` recommended) |
 | `DEPLOY_PATH` | Absolute path to the git clone on the server (e.g. `/var/www/tutorviz`) |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `OPENAI_MODEL` | Model id (e.g. `gpt-4o-mini`) |
+| `DATABASE_URL` | Supabase pooled Postgres URL for the app |
+| `DIRECT_URL` | Supabase direct Postgres URL (migrations) |
+| `CORS_ORIGIN` | Allowed browser origin (e.g. `https://tutorviz.org`) |
+| `SUPABASE_URL` | Project URL |
+| `SUPABASE_ANON_KEY` | anon key |
+| `SUPABASE_SECRET_KEY` | service role key (server only) |
 
-On each push to **`main`**, the workflow SSHs in, `git pull`s, and runs:
+On each push to **`main`**, the workflow SSHs in, **writes `.env` from those secrets**, `git pull`s, and runs:
 
 `docker compose -f docker-compose.prod.yml up -d --build`
 
 ## 4. Environment variables
 
-Create **`.env`** next to `docker-compose.prod.yml` on the server.
+### GitHub as source of truth (recommended)
+
+1. Use [`backend/.env.example`](../backend/.env.example) as a checklist for values (do not commit real `.env`).
+2. In GitHub: **Settings → Secrets and variables → Actions**, add each secret listed in the table above (same names as environment variables).
+3. Each deploy **overwrites** `$DEPLOY_PATH/.env` on the server. Update production config by editing secrets and re-running the workflow or pushing to `main`.
+
+### Manual `.env` on the server (optional)
+
+If you run `docker compose` on the VM without Actions, create **`.env`** next to `docker-compose.prod.yml` yourself. For Action deploys, the **eight app secrets** in the table must be set so the workflow can write `.env` before Compose runs.
 
 ### Supabase + database
 

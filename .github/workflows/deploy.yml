@@ -11,13 +11,43 @@ jobs:
     steps:
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: OPENAI_API_KEY,OPENAI_MODEL,DATABASE_URL,DIRECT_URL,CORS_ORIGIN,SUPABASE_URL,SUPABASE_ANON_KEY,SUPABASE_SECRET_KEY
           script_stop: true
           script: |
+            set -e
             cd "${{ secrets.DEPLOY_PATH }}"
+            if [ -z "${OPENAI_API_KEY:-}" ] || [ -z "${OPENAI_MODEL:-}" ] || \
+               [ -z "${DATABASE_URL:-}" ] || [ -z "${DIRECT_URL:-}" ] || \
+               [ -z "${CORS_ORIGIN:-}" ] || [ -z "${SUPABASE_URL:-}" ] || \
+               [ -z "${SUPABASE_ANON_KEY:-}" ] || [ -z "${SUPABASE_SECRET_KEY:-}" ]; then
+              echo "ERROR: One or more required GitHub Actions secrets are empty (see deploy workflow env list)."
+              exit 1
+            fi
+            umask 077
+            {
+              printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY"
+              printf 'OPENAI_MODEL=%s\n' "$OPENAI_MODEL"
+              printf 'DATABASE_URL=%s\n' "$DATABASE_URL"
+              printf 'DIRECT_URL=%s\n' "$DIRECT_URL"
+              printf 'CORS_ORIGIN=%s\n' "$CORS_ORIGIN"
+              printf 'SUPABASE_URL=%s\n' "$SUPABASE_URL"
+              printf 'SUPABASE_ANON_KEY=%s\n' "$SUPABASE_ANON_KEY"
+              printf 'SUPABASE_SECRET_KEY=%s\n' "$SUPABASE_SECRET_KEY"
+            } > .env
+            chmod 600 .env
             git fetch origin main
             git checkout main
             git pull origin main
