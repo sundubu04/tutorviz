@@ -9,6 +9,7 @@ interface ButtonProps {
   disabled?: boolean;
   className?: string;
   type?: 'button' | 'submit' | 'reset';
+  'aria-label'?: string;
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -19,7 +20,8 @@ const Button: React.FC<ButtonProps> = ({
   onClick,
   disabled = false,
   className = '',
-  type = 'button'
+  type = 'button',
+  'aria-label': ariaLabel,
 }) => {
   const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
   
@@ -46,6 +48,7 @@ const Button: React.FC<ButtonProps> = ({
       className={classes}
       onClick={onClick}
       disabled={disabled}
+      aria-label={ariaLabel}
     >
       {icon && <span className="mr-2">{icon}</span>}
       {children}

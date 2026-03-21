@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bell, Folder, Users, FileText, MoreVertical, Edit, Trash2 } from 'lucide-react';
+import { Bell, Folder, Users, FileText, Edit, Trash2 } from 'lucide-react';
 
 interface ClassCardProps {
   id: string;

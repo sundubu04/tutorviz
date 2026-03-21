@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Plus, Edit, Trash2, Clock, MapPin } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus } from 'lucide-react';
 import { apiClient, CalendarEvent } from '../../../utils/apiClient';
 import EventModal from './EventModal';
 import EventDetailModal from './EventDetailModal';
@@ -37,11 +37,7 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
     calendarDays.push(day);
   }
 
-  useEffect(() => {
-    fetchEvents();
-  }, [currentDate, refreshKey]);
-
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -66,7 +62,11 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentDate]);
+
+  useEffect(() => {
+    void fetchEvents();
+  }, [fetchEvents, refreshKey]);
 
   const handleCreateEvent = () => {
     setSelectedEvent(null); // Clear any selected event
@@ -142,70 +142,6 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
     }
   };
 
-  const getSubjectLabel = (subjectValue: string) => {
-    const subjects = [
-      // Group 1: Studies in Language and Literature
-      { value: 'english-a-hl', label: 'English A: Literature HL' },
-      { value: 'english-a-sl', label: 'English A: Literature SL' },
-      { value: 'english-b-hl', label: 'English B HL' },
-      { value: 'english-b-sl', label: 'English B SL' },
-      
-      // Group 2: Language Acquisition
-      { value: 'spanish-b-hl', label: 'Spanish B HL' },
-      { value: 'spanish-b-sl', label: 'Spanish B SL' },
-      { value: 'french-b-hl', label: 'French B HL' },
-      { value: 'french-b-sl', label: 'French B SL' },
-      { value: 'mandarin-b-hl', label: 'Mandarin B HL' },
-      { value: 'mandarin-b-sl', label: 'Mandarin B SL' },
-      
-      // Group 3: Individuals and Societies
-      { value: 'history-hl', label: 'History HL' },
-      { value: 'history-sl', label: 'History SL' },
-      { value: 'economics-hl', label: 'Economics HL' },
-      { value: 'economics-sl', label: 'Economics SL' },
-      { value: 'geography-hl', label: 'Geography HL' },
-      { value: 'geography-sl', label: 'Geography SL' },
-      { value: 'psychology-hl', label: 'Psychology HL' },
-      { value: 'psychology-sl', label: 'Psychology SL' },
-      { value: 'business-hl', label: 'Business Management HL' },
-      { value: 'business-sl', label: 'Business Management SL' },
-      
-      // Group 4: Sciences
-      { value: 'biology-hl', label: 'Biology HL' },
-      { value: 'biology-sl', label: 'Biology SL' },
-      { value: 'chemistry-hl', label: 'Chemistry HL' },
-      { value: 'chemistry-sl', label: 'Chemistry SL' },
-      { value: 'physics-hl', label: 'Physics HL' },
-      { value: 'physics-sl', label: 'Physics SL' },
-      { value: 'computer-science-hl', label: 'Computer Science HL' },
-      { value: 'computer-science-sl', label: 'Computer Science SL' },
-      { value: 'environmental-systems-hl', label: 'Environmental Systems HL' },
-      { value: 'environmental-systems-sl', label: 'Environmental Systems SL' },
-      
-      // Group 5: Mathematics
-      { value: 'mathematics-aa-hl', label: 'Mathematics: Analysis and Approaches HL' },
-      { value: 'mathematics-aa-sl', label: 'Mathematics: Analysis and Approaches SL' },
-      { value: 'mathematics-ai-hl', label: 'Mathematics: Applications and Interpretation HL' },
-      { value: 'mathematics-ai-sl', label: 'Mathematics: Applications and Interpretation SL' },
-      
-      // Group 6: The Arts
-      { value: 'visual-arts-hl', label: 'Visual Arts HL' },
-      { value: 'visual-arts-sl', label: 'Visual Arts SL' },
-      { value: 'music-hl', label: 'Music HL' },
-      { value: 'music-sl', label: 'Music SL' },
-      { value: 'theatre-hl', label: 'Theatre HL' },
-      { value: 'theatre-sl', label: 'Theatre SL' },
-      
-      // Core Components
-      { value: 'tok', label: 'Theory of Knowledge (TOK)' },
-      { value: 'cas', label: 'Creativity, Activity, Service (CAS)' },
-      { value: 'ee', label: 'Extended Essay (EE)' }
-    ];
-    
-    const subject = subjects.find(s => s.value === subjectValue);
-    return subject ? subject.label : subjectValue;
-  };
-
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -250,12 +186,12 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
   return (
     <div className="calendar-container">
       {/* Calendar Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-4">
-          <h2 className="text-2xl font-bold text-gray-900">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:space-x-4 sm:gap-0">
+          <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">
             {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
           </h2>
-          <div className="flex space-x-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -279,19 +215,23 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
             </Button>
           </div>
         </div>
-        
-        <Button onClick={handleCreateEvent} className="flex items-center space-x-2">
-          <Plus className="w-4 h-4" />
+
+        <Button onClick={handleCreateEvent} className="flex w-full items-center justify-center space-x-2 sm:w-auto">
+          <Plus className="h-4 w-4" />
           <span>Add Event</span>
         </Button>
       </div>
 
-      {/* Calendar Grid */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* Calendar Grid — horizontal scroll on very narrow viewports */}
+      <div className="overflow-x-auto rounded-lg bg-white shadow">
+        <div className="min-w-[560px]">
         {/* Day Headers */}
-        <div className="grid grid-cols-7 bg-gray-50 border-b">
+        <div className="grid grid-cols-7 border-b bg-gray-50">
           {dayNames.map(day => (
-            <div key={day} className="px-3 py-2 text-center text-sm font-medium text-gray-500">
+            <div
+              key={day}
+              className="calendar-day-header px-3 py-2 text-center text-sm font-medium text-gray-500"
+            >
               {day}
             </div>
           ))}
@@ -308,7 +248,7 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
             return (
               <div
                 key={index}
-                className={`min-h-[120px] p-2 border-r border-b border-gray-200 ${
+                className={`calendar-day-cell min-h-[120px] border-b border-r border-gray-200 p-2 ${
                   !day ? 'bg-gray-50' : 'bg-white'
                 } ${isToday ? 'bg-blue-50' : ''}`}
               >
@@ -348,6 +288,7 @@ const Calendar: React.FC<CalendarProps> = ({ refreshKey }) => {
               </div>
             );
           })}
+        </div>
         </div>
       </div>
 

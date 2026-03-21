@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Calendar, Clock, MapPin, BookOpen, User } from 'lucide-react';
+import { X, Calendar, Clock, BookOpen, User } from 'lucide-react';
 import { CalendarEvent } from '../../../utils/apiClient';
 import { Button } from '../../../components/ui';
 

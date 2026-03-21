@@ -28,80 +28,87 @@ const Header: React.FC<HeaderProps> = ({
   onSidebarToggle
 }) => {
   return (
-    <header className="header">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+    <header className="header px-3 sm:px-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-4">
           {onSidebarToggle && (
             <button
               onClick={onSidebarToggle}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              title="Toggle Sidebar"
+              className="flex-shrink-0 rounded-lg p-2 text-white/90 transition-colors hover:bg-white/10"
+              title="Toggle menu"
+              type="button"
             >
-              <Menu className="w-5 h-5 text-gray-600" />
+              <Menu className="h-5 w-5" />
             </button>
           )}
-          <h1 className="text-2xl font-semibold">{title}</h1>
+          <h1 className="truncate text-lg font-semibold sm:text-2xl">{title}</h1>
         </div>
-        
-        <div className="flex items-center space-x-4">
+
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:gap-4">
           {onAddClass && (
             <Button
               variant="primary"
-              icon={<Plus className="w-4 h-4" />}
+              icon={<Plus className="h-4 w-4" />}
               onClick={onAddClass}
-              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+              aria-label="Add class"
+              className="bg-blue-600 px-2.5 hover:bg-blue-700 sm:px-4 [&>span:first-child]:mr-0 sm:[&>span:first-child]:mr-2"
             >
-              Add Class
+              <span className="hidden sm:inline">Add Class</span>
             </Button>
           )}
-          
+
           {onJoinClass && (
             <Button
               variant="secondary"
-              icon={<LogIn className="w-4 h-4" />}
+              icon={<LogIn className="h-4 w-4" />}
               onClick={onJoinClass}
-              className="bg-white/20 hover:bg-white/30"
+              aria-label="Join class"
+              className="bg-white/20 px-2.5 hover:bg-white/30 sm:px-4 [&>span:first-child]:mr-0 sm:[&>span:first-child]:mr-2"
             >
-              Join Class
+              <span className="hidden sm:inline">Join Class</span>
             </Button>
           )}
-          
-          <div className="flex items-center space-x-3">
+
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:flex-initial sm:gap-3">
             {onNotifications && (
               <button
                 onClick={onNotifications}
-                className="p-2 rounded-lg hover:bg-white/20 transition-colors"
+                className="rounded-lg p-2 text-white/90 transition-colors hover:bg-white/20"
                 title="Notifications"
+                type="button"
               >
-                <Bell className="w-5 h-5" />
+                <Bell className="h-5 w-5" />
               </button>
             )}
-            
-            <div className="flex items-center space-x-2 bg-white/10 px-3 py-2 rounded-lg border border-white/20">
+
+            <div className="flex min-w-0 max-w-[min(100%,14rem)] items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-2 py-1.5 sm:max-w-none sm:gap-2 sm:px-3 sm:py-2">
               {userAvatar ? (
                 <img
                   src={userAvatar}
-                  alt={userName}
-                  className="w-8 h-8 rounded-full"
+                  alt=""
+                  className="h-8 w-8 flex-shrink-0 rounded-full"
                 />
               ) : (
-                <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-                  <User className="w-4 h-4" />
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/20">
+                  <User className="h-4 w-4 text-white" />
                 </div>
               )}
-              <div className="flex flex-col">
-                <span className="font-medium text-sm">{userName}</span>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-sm font-medium">{userName}</span>
                 {userRole && (
-                  <span className="text-xs text-gray-300 capitalize">{userRole}</span>
+                  <span className="hidden text-xs capitalize text-gray-200 sm:block">
+                    {userRole}
+                  </span>
                 )}
               </div>
               {onLogout && (
                 <button
                   onClick={onLogout}
-                  className="p-1 rounded hover:bg-white/20 transition-colors"
+                  className="flex-shrink-0 rounded p-1 text-white/90 transition-colors hover:bg-white/20"
                   title="Logout"
+                  type="button"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="h-4 w-4" />
                 </button>
               )}
             </div>

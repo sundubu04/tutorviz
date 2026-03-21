@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, CheckCircle, Circle, Clock, BookOpen, Move } from 'lucide-react';
 import { type TodoItem } from '../../../types';
 
@@ -134,27 +134,28 @@ const TodoSidebar: React.FC<TodoSidebarProps> = ({
     e.preventDefault();
   };
 
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging) return;
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isDragging) return;
 
-    const newX = e.clientX - dragOffset.x;
-    const newY = e.clientY - dragOffset.y;
+      const newX = e.clientX - dragOffset.x;
+      const newY = e.clientY - dragOffset.y;
 
-    // Get viewport dimensions
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const buttonSize = 64; // 4 * 16 (p-4 = 16px padding)
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const buttonSize = 64;
 
-    // Constrain button to viewport bounds
-    const constrainedX = Math.max(0, Math.min(newX, viewportWidth - buttonSize));
-    const constrainedY = Math.max(0, Math.min(newY, viewportHeight - buttonSize));
+      const constrainedX = Math.max(0, Math.min(newX, viewportWidth - buttonSize));
+      const constrainedY = Math.max(0, Math.min(newY, viewportHeight - buttonSize));
 
-    setButtonPosition({ x: constrainedX, y: constrainedY });
-  };
+      setButtonPosition({ x: constrainedX, y: constrainedY });
+    },
+    [isDragging, dragOffset]
+  );
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     setIsDragging(false);
-  };
+  }, []);
 
   const handleClick = (e: React.MouseEvent) => {
     // Only toggle if we weren't dragging
@@ -174,7 +175,7 @@ const TodoSidebar: React.FC<TodoSidebarProps> = ({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDragging, dragOffset]);
+  }, [isDragging, handleMouseMove, handleMouseUp]);
 
   const urgentTodos = todos.filter(todo => todo.urgent);
   const completedTodos = todos.filter(todo => todo.completed);
@@ -216,7 +217,7 @@ const TodoSidebar: React.FC<TodoSidebarProps> = ({
       {isVisible && (
         <div
           className={`
-            fixed right-0 top-0 h-full w-80 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-40
+            fixed right-0 top-0 z-40 h-full w-full max-w-sm transform bg-white shadow-xl transition-transform duration-300 ease-in-out
             ${isOpen ? 'translate-x-0' : 'translate-x-full'}
           `}
         >

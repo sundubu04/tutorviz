@@ -40,11 +40,12 @@
   margin-left: 0;
 }
 
-/* Header styles */
+/* Header styles (horizontal padding from Tailwind on Header.tsx) */
 .header {
   background: #3b82f6;
   color: white;
-  padding: 1rem 1.5rem;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
   position: sticky;
   top: 0;
@@ -56,6 +57,12 @@
   flex: 1;
   padding: 1.5rem;
   background-color: #f8fafc;
+}
+
+@media (max-width: 640px) {
+  .content-area {
+    padding: 1rem;
+  }
 }
 
 /* Responsive design */
@@ -193,5 +200,21 @@ textarea:focus {
   
   .calendar-container .text-xs {
     font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .calendar-container .min-h-\[120px\] {
+    min-height: 64px;
+  }
+
+  .calendar-container .calendar-day-header {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+    font-size: 0.65rem;
+  }
+
+  .calendar-container .calendar-day-cell {
+    padding: 0.25rem;
   }
 }
