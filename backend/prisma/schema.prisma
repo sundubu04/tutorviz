@@ -52,6 +52,7 @@ model User {
   lastName     String    @map("last_name") @db.VarChar(100)
   role         UserRole  @default(student)
   verified     Boolean   @default(false)
+  avatarUrl    String?   @map("avatar_url")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime? @map("updated_at")
 
@@ -115,11 +116,26 @@ model Assignment {
   updatedAt   DateTime?          @map("updated_at")
 
   // Relations
-  class       Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
-  creator     User                   @relation("AssignmentCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  submissions AssignmentSubmission[]
+  class         Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  creator       User                   @relation("AssignmentCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  submissions   AssignmentSubmission[]
+  attachments   AssignmentAttachment[]
 
   @@map("assignments")
+}
+
+model AssignmentAttachment {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assignmentId String   @map("assignment_id") @db.Uuid
+  name         String   @db.VarChar(255)
+  url          String
+  size         Int
+  type         String   @db.VarChar(100)
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@map("assignment_attachments")
 }
 
 model AssignmentSubmission {
