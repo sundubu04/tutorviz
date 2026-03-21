@@ -1,0 +1,90 @@
+# Deploying TutorViz (VPS + Docker + hosted Supabase)
+
+Production runs **your** containers (nginx + Express) on a VPS. **Postgres and Auth** use **Supabase Cloud**—do not run `supabase start` on the server for this setup.
+
+## 1. Server setup
+
+1. Rent a Linux VPS (Ubuntu LTS recommended), point **DNS** for `tutorviz.org` (and `www` if needed) to the server IP.
+2. Install [Docker Engine](https://docs.docker.com/engine/install/) and the [Compose plugin](https://docs.docker.com/compose/install/).
+3. Clone this repo (e.g. `/var/www/tutorviz`) and add a **deploy key** so the server can `git pull` from GitHub (read-only).
+4. In the repo root on the server, create **`.env`** (never commit). See [Environment variables](#environment-variables).
+
+## 2. TLS (HTTPS)
+
+The compose file publishes the frontend on **port 80**. Terminate TLS on the host with **Caddy**, **nginx**, or **Traefik** (Let’s Encrypt), proxying to `127.0.0.1:80`, or change the published port in [`docker-compose.prod.yml`](../docker-compose.prod.yml) to match your proxy.
+
+## 3. GitHub Actions
+
+Workflow: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml).
+
+Add these **repository secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Description |
+|--------|-------------|
+| `SSH_HOST` | VPS hostname or IP |
+| `SSH_USER` | SSH user (e.g. `deploy` or `root`) |
+| `SSH_PRIVATE_KEY` | Private key for that user (PEM, `ed25519` recommended) |
+| `DEPLOY_PATH` | Absolute path to the git clone on the server (e.g. `/var/www/tutorviz`) |
+
+On each push to **`main`**, the workflow SSHs in, `git pull`s, and runs:
+
+`docker compose -f docker-compose.prod.yml up -d --build`
+
+## 4. Environment variables
+
+Create **`.env`** next to `docker-compose.prod.yml` on the server.
+
+### Supabase + database
+
+| Variable | Notes |
+|----------|--------|
+| `DATABASE_URL` | Supabase **pooled** connection string (often port `6543`, transaction mode) for the running app |
+| `DIRECT_URL` | Supabase **direct** Postgres URL (port `5432`) for migrations (`prisma migrate deploy`) |
+| `SUPABASE_URL` | Project URL, e.g. `https://<ref>.supabase.co` |
+| `SUPABASE_ANON_KEY` | **anon** key (exposed to the browser via `/api/supabase/config`) |
+| `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` | **service role** — server only |
+
+Optional: `SUPABASE_BROWSER_URL` if the browser-visible URL differs from `SUPABASE_URL` (rare for cloud).
+
+### App
+
+| Variable | Example |
+|----------|--------|
+| `CORS_ORIGIN` | `https://tutorviz.org` |
+| `NODE_ENV` | `production` (compose also sets this) |
+| `PORT` | `5001` (compose sets this) |
+| `OPENAI_API_KEY` | As needed |
+| `OPENAI_MODEL` | As needed |
+
+**Local development:** [`docker-compose.dev.yml`](../docker-compose.dev.yml) already sets `DIRECT_URL`. For Prisma CLI on the host, if you do not use a pooler, set `DIRECT_URL` to the **same** value as `DATABASE_URL`.
+
+## 5. Supabase dashboard (manual)
+
+In the [Supabase Dashboard](https://supabase.com/dashboard) → your project:
+
+1. **Authentication → URL configuration**
+   - **Site URL:** `https://tutorviz.org`
+   - **Redirect URLs:** include `https://tutorviz.org/**` and any dev URLs you still use (e.g. `http://localhost:3000/**`).
+2. Confirm **API** keys match your server `.env`.
+
+## 6. Database migrations
+
+After deploying schema changes, run migrations on the server (from the repo root, with `.env` loaded):
+
+```bash
+cd /path/to/tutorviz/backend
+set -a && source ../.env && set +a   # or export vars manually
+npx prisma migrate deploy
+```
+
+Use a connection that supports DDL (your **`DIRECT_URL`** / direct Postgres URL). You can run this over SSH instead of storing DB credentials in GitHub Actions.
+
+## 7. Verify
+
+- `https://tutorviz.org` serves the SPA.
+- `https://tutorviz.org/api/health` returns JSON from the API.
+- Sign-in works (Supabase Auth + redirect URLs).
+
+## 8. Uploads
+
+`backend_uploads` volume in [`docker-compose.prod.yml`](../docker-compose.prod.yml) persists `uploads/` across container restarts. Back up this volume or use object storage for durability if needed.

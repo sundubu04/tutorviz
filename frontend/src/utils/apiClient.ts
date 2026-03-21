@@ -1,12 +1,15 @@
 // API Client for TutoriAI Frontend
 // This client handles all communication with the backend API
 
+import { getApiBase } from '../config/api';
+
 export interface User {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
   role: 'student' | 'teacher' | 'admin';
+  verified: boolean;
   avatarUrl?: string;
   createdAt: string;
   updatedAt: string;
@@ -86,7 +89,7 @@ class ApiClient {
   private baseURL: string;
   private token: string | null;
 
-  constructor(baseURL: string = 'http://localhost:5001/api') {
+  constructor(baseURL: string = getApiBase()) {
     this.baseURL = baseURL;
     this.token = localStorage.getItem('authToken');
   }
@@ -176,6 +179,17 @@ class ApiClient {
     return this.request<{ user: User }>('/auth/profile', {
       method: 'PUT',
       body: JSON.stringify(profileData),
+    });
+  }
+
+  // Admin methods
+  async getPendingUsers(): Promise<{ users: User[] }> {
+    return this.request<{ users: User[] }>('/users/pending');
+  }
+
+  async verifyUser(userId: string): Promise<{ message: string; user: User }> {
+    return this.request<{ message: string; user: User }>(`/users/${userId}/verify`, {
+      method: 'PATCH',
     });
   }
 

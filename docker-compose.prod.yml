@@ -1,0 +1,44 @@
+# Production stack: nginx (SPA + /api proxy) + Express API.
+# Create a .env next to this file on the server (never commit) with at least:
+#   DATABASE_URL, DIRECT_URL (Supabase: pooler + direct), SUPABASE_URL, SUPABASE_ANON_KEY,
+#   SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY), CORS_ORIGIN, OPENAI_API_KEY, etc.
+# See docs/DEPLOY.md
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "5001"
+    expose:
+      - "5001"
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - tutorviz-prod
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_BASE: /api
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - tutorviz-prod
+
+volumes:
+  backend_uploads:
+
+networks:
+  tutorviz-prod:
+    name: tutorviz-prod-network

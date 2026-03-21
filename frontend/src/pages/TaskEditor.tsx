@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import LatexToPdfViewer from '../components/LatexToPdfViewer';
 import ResizablePanel from '../components/resizable/ResizablePanel';
+import { getApiBase } from '../config/api';
 
 const TaskEditor: React.FC = () => {
   const { taskId } = useParams<{ taskId: string }>();
@@ -92,7 +93,7 @@ Your main content goes here.
 
     try {
       const token = localStorage.getItem('authToken');
-      const chatRes = await fetch(`http://localhost:5001/api/tasks/${taskId}/chat/messages`, {
+      const chatRes = await fetch(`${getApiBase()}/tasks/${taskId}/chat/messages`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -145,7 +146,7 @@ Your main content goes here.
         setIsLoading(true);
         const token = localStorage.getItem('authToken');
 
-        const res = await fetch(`http://localhost:5001/api/tasks/${taskId}`, {
+        const res = await fetch(`${getApiBase()}/tasks/${taskId}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -220,7 +221,7 @@ Your main content goes here.
       const token = localStorage.getItem('authToken');
       const nextContent = typeof contentOverride === 'string' ? contentOverride : latexContent;
 
-      const res = await fetch(`http://localhost:5001/api/tasks/${taskId}`, {
+      const res = await fetch(`${getApiBase()}/tasks/${taskId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -259,7 +260,7 @@ Your main content goes here.
       setIsAgentWorking(true);
       const token = localStorage.getItem('authToken');
 
-      const res = await fetch(`http://localhost:5001/api/tasks/${taskId}/ai/latex-edit`, {
+      const res = await fetch(`${getApiBase()}/tasks/${taskId}/ai/latex-edit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -373,7 +374,7 @@ Your main content goes here.
 
                     try {
                       const token = localStorage.getItem('authToken');
-                      const res = await fetch(`http://localhost:5001/api/tasks/${taskId}`, {
+                      const res = await fetch(`${getApiBase()}/tasks/${taskId}`, {
                         method: 'PUT',
                         headers: {
                           'Content-Type': 'application/json',

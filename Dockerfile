@@ -3,6 +3,9 @@ FROM node:20-alpine AS build
 
 WORKDIR /app/frontend
 
+ARG REACT_APP_API_BASE=/api
+ENV REACT_APP_API_BASE=$REACT_APP_API_BASE
+
 # Copy package files
 COPY frontend/package*.json ./
 

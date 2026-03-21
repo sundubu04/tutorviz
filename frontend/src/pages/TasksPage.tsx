@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, FileText, MoreVertical } from 'lucide-react';
+import { getApiBase } from '../config/api';
 
 const DEFAULT_LATEX_CONTENT = `\\documentclass{article}
 \\usepackage[utf8]{inputenc}
@@ -42,7 +43,7 @@ const TasksPage: React.FC = () => {
       setTasksError(null);
 
       const token = localStorage.getItem('authToken');
-      const res = await fetch('http://localhost:5001/api/tasks', {
+      const res = await fetch(`${getApiBase()}/tasks`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -102,7 +103,7 @@ const TasksPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('authToken');
-      const res = await fetch(`http://localhost:5001/api/tasks/${editingTask.id}`, {
+      const res = await fetch(`${getApiBase()}/tasks/${editingTask.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -130,7 +131,7 @@ const TasksPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('authToken');
-      const res = await fetch(`http://localhost:5001/api/tasks/${taskId}`, {
+      const res = await fetch(`${getApiBase()}/tasks/${taskId}`, {
         method: 'DELETE',
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -157,7 +158,7 @@ const TasksPage: React.FC = () => {
     try {
       const token = localStorage.getItem('authToken');
 
-      const res = await fetch('http://localhost:5001/api/tasks', {
+      const res = await fetch(`${getApiBase()}/tasks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

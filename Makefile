@@ -26,6 +26,5 @@ build:
 	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) build --no-cache
 
 clean:
-	# Like down, but also removes volumes (dev DB data, etc.).
 	$(DOCKER_COMPOSE) -f $(COMPOSE_FILE) down -v --remove-orphans
 

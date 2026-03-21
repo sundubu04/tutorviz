@@ -27,6 +27,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        verified: user.verified,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt
       }
@@ -80,6 +81,7 @@ router.put('/profile', authenticateToken, [
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        verified: user.verified,
         updatedAt: user.updatedAt
       }
     });

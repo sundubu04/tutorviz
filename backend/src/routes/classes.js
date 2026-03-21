@@ -15,7 +15,7 @@ router.get('/', authenticateToken, async (req, res) => {
     
     let classes = [];
 
-    if (userRole === 'teacher') {
+    if (userRole === 'teacher' || userRole === 'admin') {
       // Teachers see classes they teach
       classes = await prisma.class.findMany({
         where: {
@@ -123,7 +123,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     // Check if user has access to this class
     let hasAccess = false;
 
-    if (req.user.role === 'teacher') {
+    if (req.user.role === 'teacher' || req.user.role === 'admin') {
       const teacherClass = await prisma.class.findFirst({
         where: {
           id: id,

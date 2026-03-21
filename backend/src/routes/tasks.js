@@ -210,7 +210,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     const task = ownershipResult;
-    if (task.createdBy !== userId && task.creator.role !== 'teacher') {
+    if (task.createdBy !== userId && task.creator.role !== 'teacher' && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Not authorized to update this task' });
     }
 
@@ -282,7 +282,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     }
 
     const task = ownershipResult;
-    if (task.createdBy !== userId && task.creator.role !== 'teacher') {
+    if (task.createdBy !== userId && task.creator.role !== 'teacher' && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Not authorized to delete this task' });
     }
 

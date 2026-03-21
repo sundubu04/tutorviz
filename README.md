@@ -128,7 +128,8 @@ The following environment variables can be configured:
 - `CORS_ORIGIN`: Allowed CORS origin
 
 **Frontend:**
-- `REACT_APP_API_URL`: Backend API URL
+- `REACT_APP_API_BASE`: API base path or URL (default local dev: `http://localhost:5001/api`; production Docker build uses `/api`)
+- `REACT_APP_BACKEND_URL` / `REACT_APP_API_URL`: Optional origin for cross-origin dev (see [`frontend/src/config/api.ts`](frontend/src/config/api.ts))
 
 ### Database
 
@@ -141,24 +142,27 @@ The PostgreSQL database is automatically initialized with:
 
 ## 🚀 Deployment
 
-### Production Deployment
+### Production (VPS + Supabase Cloud)
 
-1. Build the production images:
-   ```bash
-   ./docker.sh build prod
-   ```
+See **[docs/DEPLOY.md](docs/DEPLOY.md)** for GitHub Actions deploy, server `.env`, Supabase dashboard settings, TLS, and Prisma migrations.
 
-2. Start production services:
-   ```bash
-   ./docker.sh start prod
-   ```
+On the server:
 
-3. Configure your reverse proxy (nginx, Apache) to point to the frontend container
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+GitHub Actions (push to `main`) can run the same via SSH; configure secrets as described in `docs/DEPLOY.md`.
+
+### Local / dev Docker
+
+- **Development**: `./docker.sh start dev` or `docker compose -f docker-compose.dev.yml up -d`
+- **Production images locally**: `docker compose -f docker-compose.prod.yml build`
 
 ### Environment-Specific Configurations
 
 - **Development**: Uses volume mounts for live code editing and hot reloading
-- **Production**: Uses optimized builds and production-ready configurations
+- **Production**: [`docker-compose.prod.yml`](docker-compose.prod.yml) — nginx serves the SPA and proxies `/api` to the backend container
 
 ## 🐛 Troubleshooting
 

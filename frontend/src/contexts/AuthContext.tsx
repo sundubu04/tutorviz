@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { getBackendOriginForConfig } from '../config/api';
 import { apiClient, User, RegisterData } from '../utils/apiClient';
 
 interface AuthContextType {
@@ -31,12 +32,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (supabaseInitPromiseRef.current) return supabaseInitPromiseRef.current;
 
     supabaseInitPromiseRef.current = (async () => {
-      const backendUrl =
-        process.env.REACT_APP_BACKEND_URL ||
-        process.env.REACT_APP_API_URL ||
-        'http://localhost:5001';
+      const backendOrigin = getBackendOriginForConfig();
+      const configUrl = `${backendOrigin}/api/supabase/config`;
 
-      const configRes = await fetch(`${backendUrl}/api/supabase/config`);
+      const configRes = await fetch(configUrl);
       if (!configRes.ok) {
         let details = '';
         try {
@@ -47,7 +46,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
 
         throw new Error(
-          `Failed to load Supabase config from ${backendUrl}/api/supabase/config${details ? `: ${details}` : ''}`
+          `Failed to load Supabase config from ${configUrl}${details ? `: ${details}` : ''}`
         );
       }
 
