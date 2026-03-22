@@ -49,15 +49,15 @@ export class ClassesService {
   }
 
   canCreateClass(userRole?: string): boolean {
-    return userRole === 'teacher';
+    return userRole === 'teacher' || userRole === 'admin';
   }
 
   canEditClass(userRole?: string): boolean {
-    return userRole === 'teacher';
+    return userRole === 'teacher' || userRole === 'admin';
   }
 
   canDeleteClass(userRole?: string): boolean {
-    return userRole === 'teacher';
+    return userRole === 'teacher' || userRole === 'admin';
   }
 
   convertClassToApiClass(classData: Class): ApiClass {
@@ -80,8 +80,11 @@ export class ClassesService {
       return { canAccess: false, message: 'You must be logged in to access this feature.' };
     }
     
-    if (userRole !== 'teacher') {
-      return { canAccess: false, message: 'Only teachers can access this feature. Please log in with a teacher account.' };
+    if (userRole !== 'teacher' && userRole !== 'admin') {
+      return {
+        canAccess: false,
+        message: 'Only teachers and administrators can access this feature.',
+      };
     }
     
     return { canAccess: true };

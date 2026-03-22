@@ -246,11 +246,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Create new class (teachers only)
+// Create new class (teachers and admins)
 router.post(
   '/',
   authenticateToken,
-  requireRole(['teacher']),
+  requireRole(['teacher', 'admin']),
   [
     body('name').trim().isLength({ min: 1, max: 255 }),
     body('description').optional().trim(),
@@ -311,11 +311,11 @@ router.post(
   }
 );
 
-// Update class (teacher who owns the class)
+// Update class (teacher or admin who owns the class)
 router.put(
   '/:id',
   authenticateToken,
-  requireRole(['teacher']),
+  requireRole(['teacher', 'admin']),
   requireOwnership('classes', 'id', 'teacher_id'),
   [
     body('name').optional().trim().isLength({ min: 1, max: 255 }),
@@ -400,11 +400,11 @@ router.put(
   }
 );
 
-// Delete class (teacher who owns the class)
+// Delete class (teacher or admin who owns the class)
 router.delete(
   '/:id',
   authenticateToken,
-  requireRole(['teacher']),
+  requireRole(['teacher', 'admin']),
   requireOwnership('classes', 'id', 'teacher_id'),
   async (req, res) => {
     try {
@@ -433,11 +433,11 @@ router.delete(
   }
 );
 
-// Enroll student in class (teachers only)
+// Enroll student in class (teachers and admins)
 router.post(
   '/:id/enroll',
   authenticateToken,
-  requireRole(['teacher']),
+  requireRole(['teacher', 'admin']),
   requireOwnership('classes', 'id', 'teacher_id'),
   [body('studentId').isUUID()],
   async (req, res) => {
@@ -501,11 +501,11 @@ router.post(
   }
 );
 
-// Remove student from class (teachers only)
+// Remove student from class (teachers and admins)
 router.delete(
   '/:id/enroll/:studentId',
   authenticateToken,
-  requireRole(['teacher']),
+  requireRole(['teacher', 'admin']),
   requireOwnership('classes', 'id', 'teacher_id'),
   async (req, res) => {
     try {
@@ -535,11 +535,11 @@ router.delete(
   }
 );
 
-// Get students for a class (teachers only)
+// Get students for a class (teachers and admins)
 router.get(
   '/:id/students',
   authenticateToken,
-  requireRole(['teacher']),
+  requireRole(['teacher', 'admin']),
   requireOwnership('classes', 'id', 'teacher_id'),
   async (req, res) => {
     try {

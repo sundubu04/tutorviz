@@ -287,8 +287,8 @@ const requireClassEnrollment = () => {
           'Class ID is missing from request'));
       }
 
-      // Teachers can access any class
-      if (req.user.role === 'teacher') {
+      // Teachers and admins can access any class (enrollment not required)
+      if (req.user.role === 'teacher' || req.user.role === 'admin') {
         return next();
       }
 
