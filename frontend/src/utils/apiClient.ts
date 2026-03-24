@@ -1,4 +1,4 @@
-// API Client for TutoriAI Frontend
+// API Client for Tutorviz Frontend
 // This client handles all communication with the backend API
 
 import { getApiBase } from '../config/api';

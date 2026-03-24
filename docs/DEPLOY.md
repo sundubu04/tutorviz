@@ -11,7 +11,49 @@ Production runs **your** containers (nginx + Express) on a VPS. **Postgres and A
 
 ## 2. TLS (HTTPS)
 
-The compose file publishes the frontend on **port 80**. Terminate TLS on the host with **Caddy**, **nginx**, or **Traefik** (Let’s Encrypt), proxying to `127.0.0.1:80`, or change the published port in [`docker-compose.prod.yml`](../docker-compose.prod.yml) to match your proxy.
+Production compose runs **`nginx-edge`** on the VM’s **port 80** and **443**. The **frontend** container is **not** published to the host; it only serves **HTTP** on the Docker network to `nginx-edge` (which also proxies `/api` via the SPA container’s existing nginx rules).
+
+### First-time Let’s Encrypt (HTTP-01, webroot)
+
+1. Point **DNS** at the server and open **80/443** in the security group (see §1).
+2. Deploy the stack: `docker compose -f docker-compose.prod.yml up -d` — the site is available on **plain HTTP** until you add HTTPS.
+3. Request a certificate (replace email / domains if needed):
+
+   ```bash
+   docker compose -f docker-compose.prod.yml --profile tls run --rm certbot certonly \
+     --webroot -w /var/www/certbot \
+     --email you@example.com --agree-tos --no-eff-email \
+     -d tutorviz.org -d www.tutorviz.org
+   ```
+
+   Use the **same first** `-d` name consistently; Let’s Encrypt stores files under `/etc/letsencrypt/live/<first-name>/` inside the **`certbot-conf`** volume.
+
+4. Enable HTTPS on the edge:
+
+   ```bash
+   cp deploy/nginx-edge/01-https.conf.example deploy/nginx-edge/01-https.conf
+   ```
+
+   Edit **`ssl_certificate`** / **`ssl_certificate_key`** if your `live/` folder name is not `tutorviz.org`. **`01-https.conf` is gitignored** so each server can keep its own copy.
+
+5. Reload edge nginx:
+
+   ```bash
+   docker compose -f docker-compose.prod.yml exec nginx-edge nginx -s reload
+   ```
+
+6. Optional but recommended: in [`deploy/nginx-edge/00-http.conf`](../deploy/nginx-edge/00-http.conf), replace the `location / { proxy_pass ... }` block with `location / { return 301 https://$host$request_uri; }` while keeping the **`/.well-known/acme-challenge/`** location **above** it so renewals still work.
+
+### Renewals
+
+Schedule twice daily (host **cron** or **systemd timer**):
+
+```bash
+docker compose -f docker-compose.prod.yml --profile tls run --rm certbot renew
+docker compose -f docker-compose.prod.yml exec nginx-edge nginx -s reload
+```
+
+Test with: `docker compose -f docker-compose.prod.yml --profile tls run --rm certbot renew --dry-run`.
 
 ## 3. GitHub Actions
 

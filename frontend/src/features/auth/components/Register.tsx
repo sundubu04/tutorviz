@@ -127,7 +127,7 @@ const Register: React.FC<RegisterProps> = ({
             Create your account
           </h2>
           <p className="text-gray-600">
-            Join TutoriAI and start managing your classroom
+            Join Tutorviz and start managing your classroom
           </p>
         </div>
 

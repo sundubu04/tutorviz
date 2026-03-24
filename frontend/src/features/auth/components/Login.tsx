@@ -94,7 +94,7 @@ const Login: React.FC<LoginProps> = ({
             Welcome back
           </h2>
           <p className="text-gray-600">
-            Sign in to your TutoriAI account
+            Sign in to your Tutorviz account
           </p>
         </div>
 
