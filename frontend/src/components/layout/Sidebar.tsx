@@ -45,7 +45,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div className="flex items-center space-x-2">
               <BookOpen className="w-8 h-8 text-blue-600" />
-              <h2 className="text-xl font-bold text-gray-900">TutoriAI</h2>
+              <h2 className="text-xl font-bold text-gray-900">Tutorviz</h2>
             </div>
             <button
               onClick={onMobileToggle}

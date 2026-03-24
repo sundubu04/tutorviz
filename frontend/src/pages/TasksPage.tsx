@@ -13,7 +13,7 @@ const DEFAULT_LATEX_CONTENT = `\\documentclass{article}
 \\geometry{margin=1in}
 
 \\title{Task Document}
-\\author{TutoriAI}
+\\author{Tutorviz}
 \\date{\\today}
 
 \\begin{document}

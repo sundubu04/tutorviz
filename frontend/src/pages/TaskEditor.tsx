@@ -40,7 +40,7 @@ const TaskEditor: React.FC = () => {
 \\geometry{margin=1in}
 
 \\title{Task Document}
-\\author{TutoriAI}
+\\author{Tutorviz}
 \\date{\\today}
 
 \\begin{document}
