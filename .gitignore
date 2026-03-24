@@ -89,6 +89,9 @@ backend/.env
 # Docker
 .dockerignore
 
+# Generated on server after first certbot run (see deploy/nginx-edge/01-https.conf.example)
+deploy/nginx-edge/01-https.conf
+
 # Temporary files
 *.tmp
 *.temp
