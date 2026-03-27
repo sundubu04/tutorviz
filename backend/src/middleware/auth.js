@@ -155,7 +155,6 @@ const authenticateToken = async (req, res, next) => {
         data: {
           id: authUser.id,
           email: authUser.email,
-          passwordHash: '', // legacy column; Supabase Auth is the source of truth for credentials
           firstName,
           lastName,
           role,

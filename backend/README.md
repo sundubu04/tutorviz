@@ -4,7 +4,7 @@ A comprehensive Node.js/Express.js backend API for the TutoriAI classroom manage
 
 ## Features
 
-- **Authentication & Authorization**: JWT-based authentication with role-based access control
+- **Authentication & Authorization**: Supabase Auth (JWT access tokens) with role-based access control
 - **User Management**: Complete user CRUD operations with profile management
 - **Class Management**: Create, manage, and enroll students in classes
 - **Assignment System**: Create assignments, submit work, and grade submissions
@@ -16,8 +16,7 @@ A comprehensive Node.js/Express.js backend API for the TutoriAI classroom manage
 - **Runtime**: Node.js
 - **Framework**: Express.js
 - **Database**: PostgreSQL
-- **Authentication**: JWT (jsonwebtoken)
-- **Password Hashing**: bcryptjs
+- **Authentication**: Supabase Auth + JWT validation (jsonwebtoken where applicable)
 - **Validation**: express-validator
 - **Security**: helmet, express-rate-limit
 - **File Upload**: multer
@@ -86,11 +85,8 @@ A comprehensive Node.js/Express.js backend API for the TutoriAI classroom manage
 ## API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - User login
-- `GET /api/auth/profile` - Get current user profile
+- `GET /api/auth/profile` - Get current user profile (requires Supabase access token)
 - `PUT /api/auth/profile` - Update user profile
-- `PUT /api/auth/change-password` - Change password
 
 ### Users
 - `GET /api/users` - Get all users (admin only)
@@ -133,7 +129,6 @@ A comprehensive Node.js/Express.js backend API for the TutoriAI classroom manage
 ### Users
 - `id` (UUID, Primary Key)
 - `email` (VARCHAR, Unique)
-- `password_hash` (VARCHAR)
 - `first_name` (VARCHAR)
 - `last_name` (VARCHAR)
 - `role` (VARCHAR: 'student', 'teacher', 'admin')
@@ -256,8 +251,8 @@ npm run migrate
 
 ## Security Features
 
-- Password hashing with bcrypt
-- JWT token authentication
+- Supabase Auth for credentials; profiles stored in Postgres without password hashes
+- JWT access token validation
 - Input validation and sanitization
 - Rate limiting
 - Security headers with helmet
