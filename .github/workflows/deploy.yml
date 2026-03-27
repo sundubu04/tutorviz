@@ -20,11 +20,15 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          # Optional: set in GitHub Actions secrets to automate first-time + renewals (see docs/DEPLOY.md).
+          CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: OPENAI_API_KEY,OPENAI_MODEL,DATABASE_URL,DIRECT_URL,CORS_ORIGIN,SUPABASE_URL,SUPABASE_ANON_KEY,SUPABASE_SECRET_KEY
+          timeout: 60s
+          command_timeout: 30m
+          envs: OPENAI_API_KEY,OPENAI_MODEL,DATABASE_URL,DIRECT_URL,CORS_ORIGIN,SUPABASE_URL,SUPABASE_ANON_KEY,SUPABASE_SECRET_KEY,CERTBOT_EMAIL
           script_stop: true
           script: |
             set -e
@@ -46,6 +50,8 @@ jobs:
               printf 'SUPABASE_URL=%s\n' "$SUPABASE_URL"
               printf 'SUPABASE_ANON_KEY=%s\n' "$SUPABASE_ANON_KEY"
               printf 'SUPABASE_SECRET_KEY=%s\n' "$SUPABASE_SECRET_KEY"
+              # Same-origin API for the built SPA (matches docker-compose.prod.yml frontend build arg).
+              printf '%s\n' 'REACT_APP_API_BASE=/api'
             } > .env
             chmod 600 .env
             git fetch origin main
@@ -54,3 +60,31 @@ jobs:
             docker compose -f docker-compose.prod.yml build
             docker compose -f docker-compose.prod.yml run --rm --no-deps backend npx prisma migrate deploy
             docker compose -f docker-compose.prod.yml up -d
+            # Load new bind-mounted edge configs without requiring container restart.
+            docker compose -f docker-compose.prod.yml exec -T nginx-edge nginx -s reload 2>/dev/null || true
+            # TLS (optional): set CERTBOT_EMAIL in Actions secrets. Domains must match deploy/nginx-edge
+            # (tutorviz.org + www) and ssl_certificate paths in 01-https.conf.example.
+            if [ -n "${CERTBOT_EMAIL:-}" ]; then
+              COMPOSE="docker compose -f docker-compose.prod.yml"
+              CERT_LIST=$($COMPOSE --profile tls run --rm certbot certificates 2>&1) || true
+              if ! echo "$CERT_LIST" | grep -q 'tutorviz.org'; then
+                echo "Requesting new Let's Encrypt certificate (HTTP-01 via webroot) ..."
+                $COMPOSE --profile tls run --rm certbot certonly \
+                  --webroot -w /var/www/certbot \
+                  --non-interactive \
+                  --email "$CERTBOT_EMAIL" \
+                  --agree-tos \
+                  --no-eff-email \
+                  -d tutorviz.org \
+                  -d www.tutorviz.org
+              fi
+              echo "Renewing certificates if due ..."
+              $COMPOSE --profile tls run --rm certbot renew --webroot -w /var/www/certbot || true
+              if echo "$($COMPOSE --profile tls run --rm certbot certificates 2>&1)" | grep -q 'tutorviz.org'; then
+                if [ ! -f deploy/nginx-edge/01-https.conf ]; then
+                  echo "Installing HTTPS server block from 01-https.conf.example ..."
+                  cp deploy/nginx-edge/01-https.conf.example deploy/nginx-edge/01-https.conf
+                fi
+              fi
+              $COMPOSE exec -T nginx-edge nginx -t && $COMPOSE exec -T nginx-edge nginx -s reload
+            fi

@@ -17,7 +17,9 @@ Production compose runs **`nginx-edge`** on the VM’s **port 80** and **443**. 
 
 1. Point **DNS** at the server and open **80/443** in the security group (see §1).
 2. Deploy the stack: `docker compose -f docker-compose.prod.yml up -d` — the site is available on **plain HTTP** until you add HTTPS.
-3. Request a certificate (replace email / domains if needed):
+3. **With GitHub Actions:** add optional secret **`CERTBOT_EMAIL`**. Each deploy will run **`certbot certonly`** when no certificate exists yet, **`certbot renew`**, install **`01-https.conf`** from the example if missing, and **`nginx -s reload`** on success. Domains are currently **`tutorviz.org`** and **`www.tutorviz.org`** (must match `server_name` and cert paths under `live/tutorviz.org/`). For another apex, adjust [`deploy/nginx-edge/00-http.conf`](../deploy/nginx-edge/00-http.conf), [`01-https.conf.example`](../deploy/nginx-edge/01-https.conf.example), and the `-d` flags in [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml).
+
+4. **Manual** issuance (replace email / domains if needed):
 
    ```bash
    docker compose -f docker-compose.prod.yml --profile tls run --rm certbot certonly \
@@ -28,21 +30,21 @@ Production compose runs **`nginx-edge`** on the VM’s **port 80** and **443**. 
 
    Use the **same first** `-d` name consistently; Let’s Encrypt stores files under `/etc/letsencrypt/live/<first-name>/` inside the **`certbot-conf`** volume.
 
-4. Enable HTTPS on the edge:
+5. Enable HTTPS on the edge (if not already created by the workflow):
 
    ```bash
    cp deploy/nginx-edge/01-https.conf.example deploy/nginx-edge/01-https.conf
    ```
 
-   Edit **`ssl_certificate`** / **`ssl_certificate_key`** if your `live/` folder name is not `tutorviz.org`. **`01-https.conf` is gitignored** so each server can keep its own copy.
+   Edit **`ssl_certificate`** / **`ssl_certificate_key`** if your `live/` folder name is not `tutorviz.org`. **`01-https.conf` is gitignored** so each server can keep its own copy. If you copied an older **`01-https.conf`** without **`resolver 127.0.0.11`** and **`proxy_pass $frontend_upstream`**, merge those lines from the current **`.example`** so nginx does not fail when **`frontend`** appears later on the Docker network.
 
-5. Reload edge nginx:
+6. Reload edge nginx:
 
    ```bash
    docker compose -f docker-compose.prod.yml exec nginx-edge nginx -s reload
    ```
 
-6. Optional but recommended: in [`deploy/nginx-edge/00-http.conf`](../deploy/nginx-edge/00-http.conf), replace the `location / { proxy_pass ... }` block with `location / { return 301 https://$host$request_uri; }` while keeping the **`/.well-known/acme-challenge/`** location **above** it so renewals still work.
+7. Optional but recommended: in [`deploy/nginx-edge/00-http.conf`](../deploy/nginx-edge/00-http.conf), replace the `location / { proxy_pass ... }` block with `location / { return 301 https://$host$request_uri; }` while keeping the **`/.well-known/acme-challenge/`** location **above** it so renewals still work.
 
 ### Renewals
 
@@ -75,8 +77,9 @@ Add these **repository secrets** (Settings → Secrets and variables → Actions
 | `SUPABASE_URL` | Project URL |
 | `SUPABASE_ANON_KEY` | anon key |
 | `SUPABASE_SECRET_KEY` | service role key (server only) |
+| `CERTBOT_EMAIL` | *(optional)* Let’s Encrypt account email; enables **`certbot certonly` / `renew`** and HTTPS vhost install on deploy (see §2) |
 
-On each push to **`main`**, the workflow SSHs in, **writes `.env` from those secrets**, `git pull`s, **builds images**, runs **`npx prisma migrate deploy`** in a one-off backend container (uses **`DIRECT_URL`** from `.env`), then starts the stack with **`docker compose -f docker-compose.prod.yml up -d`**.
+On each push to **`main`**, the workflow SSHs in, **writes `.env` from those secrets** (including **`REACT_APP_API_BASE=/api`** for Compose), `git pull`s, **builds images**, runs **`npx prisma migrate deploy`** in a one-off backend container (uses **`DIRECT_URL`** from `.env`), starts the stack with **`docker compose -f docker-compose.prod.yml up -d`**, reloads **nginx-edge**, and runs the TLS steps when **`CERTBOT_EMAIL`** is set. SSH **timeout** is **60s** and remote **command timeout** is **30m** so **`docker compose build`** can finish.
 
 You need committed migrations under `backend/prisma/migrations/` (create them locally with `npx prisma migrate dev`). If that folder is missing or empty, `migrate deploy` fails and the deploy stops.
 
