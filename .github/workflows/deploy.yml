@@ -6,7 +6,68 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Validates secrets against real APIs before SSH (OpenAI + Supabase are reachable from Actions).
+  # Database URLs are checked on the VPS (see deploy job) so Supabase IP allowlists that exclude
+  # GitHub do not block deploys.
+  verify-api-health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify OpenAI API key
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENAI_API_KEY:-}" ] || [ -z "${OPENAI_MODEL:-}" ]; then
+            echo "ERROR: OPENAI_API_KEY and OPENAI_MODEL must be set in repository secrets."
+            exit 1
+          fi
+          code="$(curl -sS -o /tmp/openai_models.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+            "https://api.openai.com/v1/models")"
+          if [ "$code" != "200" ]; then
+            echo "ERROR: OpenAI API key check failed (HTTP ${code}). Ensure the key is valid and billing is active."
+            exit 1
+          fi
+          if ! jq -e --arg m "$OPENAI_MODEL" '.data[] | select(.id == $m)' /tmp/openai_models.json >/dev/null; then
+            echo "ERROR: OPENAI_MODEL=\"${OPENAI_MODEL}\" was not found in the account's available models."
+            exit 1
+          fi
+          echo "OpenAI API key and model OK."
+
+      - name: Verify Supabase URL and keys
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ] || [ -z "${SUPABASE_SECRET_KEY:-}" ]; then
+            echo "ERROR: SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SECRET_KEY must be set in repository secrets."
+            exit 1
+          fi
+          SB_URL="${SUPABASE_URL%/}"
+          code="$(curl -sSL -o /dev/null -w "%{http_code}" "${SB_URL}/auth/v1/health")"
+          if [ "$code" != "200" ]; then
+            echo "ERROR: Supabase Auth health check failed (HTTP ${code}). Check SUPABASE_URL (project ref / region)."
+            exit 1
+          fi
+          for pair in "anon:${SUPABASE_ANON_KEY}" "service_role:${SUPABASE_SECRET_KEY}"; do
+            name="${pair%%:*}"
+            apikey="${pair#*:}"
+            code="$(curl -sSL -o /dev/null -w "%{http_code}" \
+              -H "apikey: ${apikey}" \
+              -H "Authorization: Bearer ${apikey}" \
+              "${SB_URL}/rest/v1/")"
+            if [ "$code" != "200" ]; then
+              echo "ERROR: Supabase ${name} key rejected by PostgREST (HTTP ${code}). Check the key matches this project."
+              exit 1
+            fi
+          done
+          echo "Supabase URL and keys OK."
+
   deploy:
+    needs: verify-api-health
     runs-on: ubuntu-latest
     steps:
       - name: Deploy to VPS
@@ -40,6 +101,11 @@ jobs:
               echo "ERROR: One or more required GitHub Actions secrets are empty (see deploy workflow env list)."
               exit 1
             fi
+            echo "Verifying PostgreSQL connectivity from this server (DATABASE_URL and DIRECT_URL) ..."
+            PSQL_IMG="postgres:16-alpine"
+            docker run --rm "$PSQL_IMG" psql "$DATABASE_URL" -c 'SELECT 1' -v ON_ERROR_STOP=1 >/dev/null
+            docker run --rm "$PSQL_IMG" psql "$DIRECT_URL" -c 'SELECT 1' -v ON_ERROR_STOP=1 >/dev/null
+            echo "PostgreSQL URLs are reachable from the deploy host."
             umask 077
             {
               printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY"
@@ -88,3 +154,4 @@ jobs:
               fi
               $COMPOSE exec -T nginx-edge nginx -t && $COMPOSE exec -T nginx-edge nginx -s reload
             fi
+
