@@ -46,25 +46,42 @@ jobs:
             echo "ERROR: SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SECRET_KEY must be set in repository secrets."
             exit 1
           fi
-          # Trim whitespace; curl --globoff avoids [] in URLs being parsed as glob ranges.
-          SB_URL="$(printf '%s' "$SUPABASE_URL" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's|/*$||')"
+          # Strip CR/LF, trim, and remove accidental wrapping quotes from secrets (common paste issues in GitHub).
+          trim_secrets() {
+            # shellcheck disable=SC2001
+            printf '%s' "$1" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+          }
+          SB_URL="$(trim_secrets "$SUPABASE_URL" | sed -e 's|/*$||')"
+          ANON="$(trim_secrets "$SUPABASE_ANON_KEY")"
+          SECRET="$(trim_secrets "$SUPABASE_SECRET_KEY")"
+          if [ -z "$ANON" ] || [ -z "$SECRET" ]; then
+            echo "ERROR: SUPABASE_ANON_KEY or SUPABASE_SECRET_KEY is empty after trimming."
+            exit 1
+          fi
+          case "$SB_URL" in
+            http://*|https://*) ;;
+            *) echo "ERROR: SUPABASE_URL must start with http:// or https:// (got host only or wrong value)."; exit 1 ;;
+          esac
           code="$(curl -g -sSL -o /dev/null -w "%{http_code}" \
-            -H "apikey: ${SUPABASE_ANON_KEY}" \
-            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "apikey: ${ANON}" \
+            -H "Authorization: Bearer ${ANON}" \
             "${SB_URL}/auth/v1/health")"
           if [ "$code" != "200" ]; then
             echo "ERROR: Supabase Auth health check failed (HTTP ${code}). Check SUPABASE_URL, SUPABASE_ANON_KEY, and project ref/region."
             exit 1
           fi
-          for pair in "anon:${SUPABASE_ANON_KEY}" "service_role:${SUPABASE_SECRET_KEY}"; do
-            name="${pair%%:*}"
-            apikey="${pair#*:}"
+          # Use the same trimmed keys for PostgREST (avoid for/IFS bugs if keys ever contain special chars).
+          for name_and_key in "anon|${ANON}" "service_role|${SECRET}"; do
+            name="${name_and_key%%|*}"
+            apikey="${name_and_key#*|}"
             code="$(curl -g -sSL -o /dev/null -w "%{http_code}" \
               -H "apikey: ${apikey}" \
               -H "Authorization: Bearer ${apikey}" \
               "${SB_URL}/rest/v1/")"
             if [ "$code" != "200" ]; then
-              echo "ERROR: Supabase ${name} key rejected by PostgREST (HTTP ${code}). Check the key matches this project."
+              echo "ERROR: Supabase ${name} key rejected by PostgREST (HTTP ${code})."
+              echo "Use the anon (or publishable) key and service_role secret from the same project as SUPABASE_URL."
+              echo "If you rotated JWT signing keys, copy fresh keys from Project Settings → API."
               exit 1
             fi
           done
