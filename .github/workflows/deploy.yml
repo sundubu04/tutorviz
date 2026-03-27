@@ -46,16 +46,20 @@ jobs:
             echo "ERROR: SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SECRET_KEY must be set in repository secrets."
             exit 1
           fi
-          SB_URL="${SUPABASE_URL%/}"
-          code="$(curl -sSL -o /dev/null -w "%{http_code}" "${SB_URL}/auth/v1/health")"
+          # Trim whitespace; curl --globoff avoids [] in URLs being parsed as glob ranges.
+          SB_URL="$(printf '%s' "$SUPABASE_URL" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's|/*$||')"
+          code="$(curl -g -sSL -o /dev/null -w "%{http_code}" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            "${SB_URL}/auth/v1/health")"
           if [ "$code" != "200" ]; then
-            echo "ERROR: Supabase Auth health check failed (HTTP ${code}). Check SUPABASE_URL (project ref / region)."
+            echo "ERROR: Supabase Auth health check failed (HTTP ${code}). Check SUPABASE_URL, SUPABASE_ANON_KEY, and project ref/region."
             exit 1
           fi
           for pair in "anon:${SUPABASE_ANON_KEY}" "service_role:${SUPABASE_SECRET_KEY}"; do
             name="${pair%%:*}"
             apikey="${pair#*:}"
-            code="$(curl -sSL -o /dev/null -w "%{http_code}" \
+            code="$(curl -g -sSL -o /dev/null -w "%{http_code}" \
               -H "apikey: ${apikey}" \
               -H "Authorization: Bearer ${apikey}" \
               "${SB_URL}/rest/v1/")"
