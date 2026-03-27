@@ -122,11 +122,6 @@ jobs:
               echo "ERROR: One or more required GitHub Actions secrets are empty (see deploy workflow env list)."
               exit 1
             fi
-            echo "Verifying PostgreSQL connectivity from this server (DATABASE_URL and DIRECT_URL) ..."
-            PSQL_IMG="postgres:16-alpine"
-            docker run --rm "$PSQL_IMG" psql "$DATABASE_URL" -c 'SELECT 1' -v ON_ERROR_STOP=1 >/dev/null
-            docker run --rm "$PSQL_IMG" psql "$DIRECT_URL" -c 'SELECT 1' -v ON_ERROR_STOP=1 >/dev/null
-            echo "PostgreSQL URLs are reachable from the deploy host."
             umask 077
             {
               printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY"
@@ -141,6 +136,11 @@ jobs:
               printf '%s\n' 'REACT_APP_API_BASE=/api'
             } > .env
             chmod 600 .env
+            echo "Verifying PostgreSQL connectivity from this server (DATABASE_URL and DIRECT_URL) ..."
+            PSQL_IMG="postgres:16-alpine"
+            docker run --rm "$PSQL_IMG" psql "$DATABASE_URL" -c 'SELECT 1' -v ON_ERROR_STOP=1 >/dev/null
+            docker run --rm "$PSQL_IMG" psql "$DIRECT_URL" -c 'SELECT 1' -v ON_ERROR_STOP=1 >/dev/null
+            echo "PostgreSQL URLs are reachable from the deploy host."
             git fetch origin main
             git checkout main
             git pull origin main
