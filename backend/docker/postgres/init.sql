@@ -11,7 +11,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'student',
@@ -149,16 +148,16 @@ BEGIN
     -- Only insert sample data if no users exist
     IF NOT EXISTS (SELECT 1 FROM users LIMIT 1) THEN
         -- Insert sample teacher
-        INSERT INTO users (email, password_hash, first_name, last_name, role, is_active, verified)
-        VALUES ('teacher@tutoriai.com', '$2a$10$rQZ9K8mN2pL1qR3sT5uV7w', 'John', 'Doe', 'teacher', true, true);
+        INSERT INTO users (email, first_name, last_name, role, is_active, verified)
+        VALUES ('teacher@tutoriai.com', 'John', 'Doe', 'teacher', true, true);
         
         -- Insert sample student
-        INSERT INTO users (email, password_hash, first_name, last_name, role, is_active, verified)
-        VALUES ('student@tutoriai.com', '$2a$10$rQZ9K8mN2pL1qR3sT5uV7w', 'Jane', 'Smith', 'student', true, true);
+        INSERT INTO users (email, first_name, last_name, role, is_active, verified)
+        VALUES ('student@tutoriai.com', 'Jane', 'Smith', 'student', true, true);
 
         -- Insert sample admin (can verify new users)
-        INSERT INTO users (email, password_hash, first_name, last_name, role, is_active, verified)
-        VALUES ('admin@tutoriai.com', '$2a$10$rQZ9K8mN2pL1qR3sT5uV7w', 'Admin', 'User', 'admin', true, true);
+        INSERT INTO users (email, first_name, last_name, role, is_active, verified)
+        VALUES ('admin@tutoriai.com', 'Admin', 'User', 'admin', true, true);
         
         -- Get the teacher ID
         DECLARE
@@ -202,8 +201,8 @@ BEGIN
         END;
         
         RAISE NOTICE 'Sample data inserted successfully';
-        RAISE NOTICE 'Sample Teacher: teacher@tutoriai.com (password: password123)';
-        RAISE NOTICE 'Sample Student: student@tutoriai.com (password: password123)';
+        RAISE NOTICE 'Sample Teacher: teacher@tutoriai.com — create this user in Supabase Auth to sign in';
+        RAISE NOTICE 'Sample Student: student@tutoriai.com — create this user in Supabase Auth to sign in';
     END IF;
 END $$;
 

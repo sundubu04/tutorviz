@@ -1,22 +1,15 @@
 const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Starting database seed...');
 
-  // Create sample users
-  const teacherPassword = await bcrypt.hash('password123', 12);
-  const studentPassword = await bcrypt.hash('password123', 12);
-  const adminPassword = await bcrypt.hash('password123', 12);
-
   const teacher = await prisma.user.upsert({
     where: { email: 'teacher@tutoriai.com' },
     update: {},
     create: {
       email: 'teacher@tutoriai.com',
-      passwordHash: teacherPassword,
       firstName: 'John',
       lastName: 'Doe',
       role: 'teacher',
@@ -29,7 +22,6 @@ async function main() {
     update: {},
     create: {
       email: 'student@tutoriai.com',
-      passwordHash: studentPassword,
       firstName: 'Jane',
       lastName: 'Smith',
       role: 'student',
@@ -42,7 +34,6 @@ async function main() {
     update: {},
     create: {
       email: 'admin@tutoriai.com',
-      passwordHash: adminPassword,
       firstName: 'Admin',
       lastName: 'User',
       role: 'admin',
@@ -70,8 +61,9 @@ async function main() {
   });
 
   console.log('✅ Database seeded successfully!');
-  console.log('👨‍🏫 Sample Teacher: teacher@tutoriai.com (password: password123)');
-  console.log('👨‍🎓 Sample Student: student@tutoriai.com (password: password123)');
+  console.log('👨‍🏫 Sample Teacher: teacher@tutoriai.com');
+  console.log('👨‍🎓 Sample Student: student@tutoriai.com');
+  console.log('ℹ️  Create matching accounts and passwords in Supabase Auth to sign in.');
 }
 
 main()
