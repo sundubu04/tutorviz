@@ -70,21 +70,17 @@ jobs:
             echo "ERROR: Supabase Auth health check failed (HTTP ${code}). Check SUPABASE_URL, SUPABASE_ANON_KEY, and project ref/region."
             exit 1
           fi
-          # Use the same trimmed keys for PostgREST (avoid for/IFS bugs if keys ever contain special chars).
-          for name_and_key in "anon|${ANON}" "service_role|${SECRET}"; do
-            name="${name_and_key%%|*}"
-            apikey="${name_and_key#*|}"
-            code="$(curl -g -sSL -o /dev/null -w "%{http_code}" \
-              -H "apikey: ${apikey}" \
-              -H "Authorization: Bearer ${apikey}" \
-              "${SB_URL}/rest/v1/")"
-            if [ "$code" != "200" ]; then
-              echo "ERROR: Supabase ${name} key rejected by PostgREST (HTTP ${code})."
-              echo "Use the anon (or publishable) key and service_role secret from the same project as SUPABASE_URL."
-              echo "If you rotated JWT signing keys, copy fresh keys from Project Settings → API."
-              exit 1
-            fi
-          done
+          # PostgREST OpenAPI root (/rest/v1/) allows schema access with service role only on hosted Supabase; anon returns 401 there.
+          code="$(curl -g -sSL -o /dev/null -w "%{http_code}" \
+            -H "apikey: ${SECRET}" \
+            -H "Authorization: Bearer ${SECRET}" \
+            "${SB_URL}/rest/v1/")"
+          if [ "$code" != "200" ]; then
+            echo "ERROR: Supabase service role key rejected by PostgREST (HTTP ${code})."
+            echo "Use the service_role JWT or sb_secret key from the same project as SUPABASE_URL (Project Settings → API)."
+            echo "If you rotated keys, copy fresh values from the dashboard."
+            exit 1
+          fi
           echo "Supabase URL and keys OK."
 
   deploy:
