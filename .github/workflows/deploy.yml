@@ -134,39 +134,14 @@ jobs:
             chmod 600 .env
             echo "Verifying PostgreSQL connectivity from this server (DATABASE_URL and DIRECT_URL) ..."
             PSQL_IMG="postgres:16-alpine"
-            # Supabase db.* hosts often have AAAA records; Docker may try IPv6 first while the VPS has no IPv6 route.
-            # Pin IPv4 in the container via /etc/hosts so psql and Prisma use TCP over IPv4.
-            pg_host_from_url() {
-              printf '%s' "$1" | sed -E 's|^[a-zA-Z][a-zA-Z0-9+.-]*://[^@]*@([^:/?#]+).*|\1|'
-            }
-            ipv4_of() {
-              h="$1"
-              [ -z "$h" ] && return 1
-              if command -v dig >/dev/null 2>&1; then
-                dig +short A "$h" | grep -m1 -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true
-              elif command -v getent >/dev/null 2>&1; then
-                getent ahostsv4 "$h" 2>/dev/null | awk '/STREAM/ {print $1; exit}' || true
-              fi
-            }
-            EXTRA_DOCKER_HOST_ARGS=""
-            for url in "$DATABASE_URL" "$DIRECT_URL"; do
-              dbhost="$(pg_host_from_url "$url")"
-              [ -z "$dbhost" ] && continue
-              case " $EXTRA_DOCKER_HOST_ARGS " in *" --add-host=${dbhost}:"*) continue ;; esac
-              ip="$(ipv4_of "$dbhost")"
-              if [ -n "$ip" ]; then
-                echo "Using IPv4 ${ip} for ${dbhost} (avoids unreachable IPv6 in Docker)."
-                EXTRA_DOCKER_HOST_ARGS="$EXTRA_DOCKER_HOST_ARGS --add-host=${dbhost}:${ip}"
-              fi
-            done
-            docker run --rm $EXTRA_DOCKER_HOST_ARGS "$PSQL_IMG" psql "$DATABASE_URL" -c 'SELECT 1' -v ON_ERROR_STOP=1 >/dev/null
-            docker run --rm $EXTRA_DOCKER_HOST_ARGS "$PSQL_IMG" psql "$DIRECT_URL" -c 'SELECT 1' -v ON_ERROR_STOP=1 >/dev/null
+            docker run --rm "$PSQL_IMG" psql "$DATABASE_URL" -c 'SELECT 1' -v ON_ERROR_STOP=1 >/dev/null
+            docker run --rm "$PSQL_IMG" psql "$DIRECT_URL" -c 'SELECT 1' -v ON_ERROR_STOP=1 >/dev/null
             echo "PostgreSQL URLs are reachable from the deploy host."
             git fetch origin main
             git checkout main
             git pull origin main
             docker compose -f docker-compose.prod.yml build
-            docker compose -f docker-compose.prod.yml run --rm --no-deps $EXTRA_DOCKER_HOST_ARGS backend npx prisma migrate deploy
+            docker compose -f docker-compose.prod.yml run --rm --no-deps backend npx prisma migrate deploy
             docker compose -f docker-compose.prod.yml up -d
             # Load new bind-mounted edge configs without requiring container restart.
             docker compose -f docker-compose.prod.yml exec -T nginx-edge nginx -s reload 2>/dev/null || true
