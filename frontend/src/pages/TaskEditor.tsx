@@ -11,6 +11,7 @@ import {
 import LatexToPdfViewer from '../components/LatexToPdfViewer';
 import ResizablePanel from '../components/resizable/ResizablePanel';
 import { getApiBase } from '../config/api';
+import { apiClient } from '../utils/apiClient';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 
 type MobileEditorTab = 'code' | 'preview' | 'chat';
@@ -98,14 +99,10 @@ Your main content goes here.
     }
 
     try {
-      const token = localStorage.getItem('authToken');
-      const chatRes = await fetch(`${getApiBase()}/tasks/${taskId}/chat/messages`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
+      const chatRes = await apiClient.fetchWithAuth(
+        `${getApiBase()}/tasks/${taskId}/chat/messages`,
+        { method: 'GET' }
+      );
 
       if (!chatRes.ok) return;
 
@@ -150,14 +147,9 @@ Your main content goes here.
       
       try {
         setIsLoading(true);
-        const token = localStorage.getItem('authToken');
 
-        const res = await fetch(`${getApiBase()}/tasks/${taskId}`, {
+        const res = await apiClient.fetchWithAuth(`${getApiBase()}/tasks/${taskId}`, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
         });
 
         if (!res.ok) {
@@ -224,15 +216,10 @@ Your main content goes here.
 
     try {
       setIsSaving(true);
-      const token = localStorage.getItem('authToken');
       const nextContent = typeof contentOverride === 'string' ? contentOverride : latexContent;
 
-      const res = await fetch(`${getApiBase()}/tasks/${taskId}`, {
+      const res = await apiClient.fetchWithAuth(`${getApiBase()}/tasks/${taskId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: JSON.stringify({ content: nextContent }),
       });
 
@@ -264,19 +251,17 @@ Your main content goes here.
 
     try {
       setIsAgentWorking(true);
-      const token = localStorage.getItem('authToken');
 
-      const res = await fetch(`${getApiBase()}/tasks/${taskId}/ai/latex-edit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          message: userMessage,
-          latexContent,
-        }),
-      });
+      const res = await apiClient.fetchWithAuth(
+        `${getApiBase()}/tasks/${taskId}/ai/latex-edit`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            message: userMessage,
+            latexContent,
+          }),
+        }
+      );
 
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
@@ -528,15 +513,13 @@ Your main content goes here.
                     }
 
                     try {
-                      const token = localStorage.getItem('authToken');
-                      const res = await fetch(`${getApiBase()}/tasks/${taskId}`, {
-                        method: 'PUT',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                        },
-                        body: JSON.stringify({ title: next }),
-                      });
+                      const res = await apiClient.fetchWithAuth(
+                        `${getApiBase()}/tasks/${taskId}`,
+                        {
+                          method: 'PUT',
+                          body: JSON.stringify({ title: next }),
+                        }
+                      );
                       if (!res.ok) throw new Error(`HTTP ${res.status}`);
                       setTaskTitle(next);
                       setIsEditingTitle(false);

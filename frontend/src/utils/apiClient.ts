@@ -85,17 +85,30 @@ export interface CalendarEvent {
   createdAt: string;
 }
 
+export type AccessTokenGetter = () => Promise<string | null>;
+
 class ApiClient {
   private baseURL: string;
   private token: string | null;
+  /** When set, Bearer token is read from Supabase session on each request (avoids stale JWT after refresh). */
+  private getAccessTokenFromSession: AccessTokenGetter | null = null;
+  /** After local logout, ignore Supabase session until `setToken` is called with a new token (signOut is async). */
+  private ignoreSupabaseSession = false;
 
   constructor(baseURL: string = getApiBase()) {
     this.baseURL = baseURL;
     this.token = localStorage.getItem('authToken');
   }
 
-  // Set authentication token
+  setAccessTokenGetter(getter: AccessTokenGetter | null): void {
+    this.getAccessTokenFromSession = getter;
+  }
+
+  // Set authentication token (mirror for localStorage / isAuthenticated; API calls prefer session getter when set)
   setToken(token: string | null): void {
+    if (token) {
+      this.ignoreSupabaseSession = false;
+    }
     this.token = token;
     if (token) {
       localStorage.setItem('authToken', token);
@@ -104,25 +117,79 @@ class ApiClient {
     }
   }
 
-  // Get authentication headers
-  private getHeaders(): Record<string, string> {
+  private async resolveAccessToken(): Promise<string | null> {
+    if (this.ignoreSupabaseSession) {
+      return null;
+    }
+    if (this.getAccessTokenFromSession) {
+      try {
+        const t = await this.getAccessTokenFromSession();
+        return t && t.length > 0 ? t : null;
+      } catch {
+        return null;
+      }
+    }
+    return this.token;
+  }
+
+  /** Current access token from Supabase session (or legacy mirror). Use for raw `fetch` calls. */
+  async getAccessToken(): Promise<string | null> {
+    return this.resolveAccessToken();
+  }
+
+  /** JSON request headers including fresh `Authorization` when a session exists. */
+  async getJsonAuthHeaders(): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+    const token = await this.resolveAccessToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
-    
     return headers;
+  }
+
+  /** Optional `Authorization` only; for DELETE etc. */
+  async getOptionalAuthHeaderMap(): Promise<Record<string, string>> {
+    const token = await this.resolveAccessToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  private async mergeRequestHeaders(
+    options: RequestInit
+  ): Promise<Headers> {
+    const base = new Headers();
+    base.set('Content-Type', 'application/json');
+    const token = await this.resolveAccessToken();
+    if (token) {
+      base.set('Authorization', `Bearer ${token}`);
+    }
+    const extra = options.headers;
+    if (extra) {
+      new Headers(extra as HeadersInit).forEach((value, key) => {
+        base.set(key, value);
+      });
+    }
+    return base;
+  }
+
+  /**
+   * `fetch` with the same Supabase-backed auth as `request()`.
+   * Use for endpoints that need `Response` (e.g. blobs) or ad-hoc calls outside `request()`.
+   * Default headers include `Content-Type: application/json` and `Authorization` when logged in.
+   */
+  async fetchWithAuth(url: string, init: RequestInit = {}): Promise<Response> {
+    const headers = await this.mergeRequestHeaders(init);
+    return fetch(url, { ...init, headers });
   }
 
   // Generic request method
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
+    const headers = await this.mergeRequestHeaders(options);
     const config: RequestInit = {
-      headers: this.getHeaders(),
       ...options,
+      headers,
     };
 
     try {
@@ -168,6 +235,7 @@ class ApiClient {
   }
 
   async logout(): Promise<void> {
+    this.ignoreSupabaseSession = true;
     this.setToken(null);
   }
 

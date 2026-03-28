@@ -77,6 +77,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const supabase = createClient(url, anonKey);
       supabaseRef.current = supabase;
+      apiClient.setAccessTokenGetter(() =>
+        supabase.auth.getSession().then(({ data }) => data.session?.access_token ?? null)
+      );
       return supabase;
     })();
 
@@ -84,6 +87,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return await supabaseInitPromiseRef.current;
     } catch (e) {
       supabaseInitPromiseRef.current = null;
+      apiClient.setAccessTokenGetter(null);
       throw e;
     }
   };

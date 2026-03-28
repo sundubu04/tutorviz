@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, FileText, MoreVertical } from 'lucide-react';
 import { getApiBase } from '../config/api';
+import { apiClient } from '../utils/apiClient';
 
 const DEFAULT_LATEX_CONTENT = `\\documentclass{article}
 \\usepackage[utf8]{inputenc}
@@ -42,13 +43,8 @@ const TasksPage: React.FC = () => {
       setIsLoadingTasks(true);
       setTasksError(null);
 
-      const token = localStorage.getItem('authToken');
-      const res = await fetch(`${getApiBase()}/tasks`, {
+      const res = await apiClient.fetchWithAuth(`${getApiBase()}/tasks`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
       });
 
       if (!res.ok) {
@@ -102,13 +98,8 @@ const TasksPage: React.FC = () => {
     if (!nextTitle) return;
 
     try {
-      const token = localStorage.getItem('authToken');
-      const res = await fetch(`${getApiBase()}/tasks/${editingTask.id}`, {
+      const res = await apiClient.fetchWithAuth(`${getApiBase()}/tasks/${editingTask.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: JSON.stringify({ title: nextTitle }),
       });
 
@@ -130,12 +121,8 @@ const TasksPage: React.FC = () => {
     if (!confirmed) return;
 
     try {
-      const token = localStorage.getItem('authToken');
-      const res = await fetch(`${getApiBase()}/tasks/${taskId}`, {
+      const res = await apiClient.fetchWithAuth(`${getApiBase()}/tasks/${taskId}`, {
         method: 'DELETE',
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
       });
 
       if (!res.ok) {
@@ -156,14 +143,8 @@ const TasksPage: React.FC = () => {
     setIsCreatingTask(true);
 
     try {
-      const token = localStorage.getItem('authToken');
-
-      const res = await fetch(`${getApiBase()}/tasks`, {
+      const res = await apiClient.fetchWithAuth(`${getApiBase()}/tasks`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: JSON.stringify({
           title,
           description: '',
