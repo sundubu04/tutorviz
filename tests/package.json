@@ -1,0 +1,11 @@
+{
+  "name": "tutorviz-tests",
+  "private": true,
+  "scripts": {
+    "test": "tsx --test frontend/apiClient.test.ts",
+    "test:api-client": "tsx --test frontend/apiClient.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}
