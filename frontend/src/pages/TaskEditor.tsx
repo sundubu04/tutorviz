@@ -15,6 +15,23 @@ import { apiClient } from '../utils/apiClient';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 
 type MobileEditorTab = 'code' | 'preview' | 'chat';
+type ChatRole = 'user' | 'assistant';
+
+type WorkflowEventEnvelope = {
+  type: 'workflow_event';
+  event: string;
+  workflowRunId: string;
+  taskId: string;
+  ts: number;
+  payload: any;
+};
+
+type ChatMessage = {
+  id?: string;
+  role: ChatRole;
+  content: string;
+  timestamp: Date;
+};
 
 const TaskEditor: React.FC = () => {
   const { taskId } = useParams<{ taskId: string }>();
@@ -26,8 +43,14 @@ const TaskEditor: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [isAgentWorking, setIsAgentWorking] = useState(false);
-  const [chatHistory, setChatHistory] = useState<{role: 'user' | 'assistant'; content: string; timestamp: Date}[]>([]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [aiProposal, setAiProposal] = useState<{ assistantMessage: string; updatedLatex: string } | null>(null);
+  const [workflowRunId, setWorkflowRunId] = useState<string | null>(null);
+  const [liveWorkflowEvents, setLiveWorkflowEvents] = useState<WorkflowEventEnvelope[]>([]);
+  const [pendingPlanCheckpoints, setPendingPlanCheckpoints] = useState<
+    { id: string; title: string; status?: string }[] | null
+  >(null);
+  const workflowAbortRef = useRef<AbortController | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -91,6 +114,18 @@ Your main content goes here.
 
   const latexForViewer = aiProposal?.updatedLatex ?? latexContent;
 
+  const parseWorkflowEnvelope = (content: string): WorkflowEventEnvelope | null => {
+    if (!content || typeof content !== 'string') return null;
+    if (!content.trim().startsWith('{')) return null;
+    try {
+      const obj = JSON.parse(content);
+      if (obj && obj.type === 'workflow_event' && typeof obj.event === 'string') return obj as WorkflowEventEnvelope;
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
   const loadChatHistory = useCallback(async () => {
     if (!taskId) return;
     if (!isUuid(taskId)) {
@@ -111,6 +146,7 @@ Your main content goes here.
 
       setChatHistory(
         messages.map((m: any) => ({
+          id: typeof m.id === 'string' ? m.id : undefined,
           role: m.role === 'assistant' ? 'assistant' : 'user',
           content: typeof m.content === 'string' ? m.content : '',
           timestamp: m.createdAt ? new Date(m.createdAt) : new Date(),
@@ -120,6 +156,89 @@ Your main content goes here.
       console.error('Error loading chat history:', error);
     }
   }, [taskId]);
+
+  // Cleanup workflow stream on unmount.
+  useEffect(() => {
+    return () => {
+      workflowAbortRef.current?.abort();
+    };
+  }, []);
+
+  const startWorkflowStream = useCallback(
+    async (taskIdValue: string, runId: string) => {
+      if (!isUuid(taskIdValue)) return;
+
+      // Stop any existing stream.
+      workflowAbortRef.current?.abort();
+      const aborter = new AbortController();
+      workflowAbortRef.current = aborter;
+
+      const url = `${getApiBase()}/tasks/${taskIdValue}/ai/workflow/stream/${runId}`;
+      const res = await apiClient.fetchWithAuth(url, {
+        method: 'GET',
+        headers: { Accept: 'text/event-stream' },
+        signal: aborter.signal as any,
+      } as any);
+
+      if (!res.ok || !res.body) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`Failed to start workflow stream: HTTP ${res.status} ${errText}`.trim());
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const pushEvent = (evt: WorkflowEventEnvelope) => {
+        setLiveWorkflowEvents((prev) => [...prev, evt]);
+        if (evt.event === 'plan_proposed' && Array.isArray(evt.payload?.checkpoints)) {
+          setPendingPlanCheckpoints(
+            evt.payload.checkpoints.map((c: any) => ({
+              id: String(c.id || ''),
+              title: String(c.title || ''),
+              status: typeof c.status === 'string' ? c.status : undefined,
+            }))
+          );
+        }
+        if (evt.event === 'latex_proposed') {
+          const assistantMessage =
+            typeof evt.payload?.assistantMessage === 'string' ? evt.payload.assistantMessage : 'AI proposed an update';
+          const updatedLatex = typeof evt.payload?.updatedLatex === 'string' ? evt.payload.updatedLatex : latexContent;
+          setAiProposal({ assistantMessage, updatedLatex });
+          triggerCompile();
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let idx;
+        while ((idx = buffer.indexOf('\n\n')) !== -1) {
+          const raw = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+
+          let eventName = 'message';
+          let data = '';
+          for (const line of raw.split('\n')) {
+            if (line.startsWith('event:')) eventName = line.slice('event:'.length).trim();
+            if (line.startsWith('data:')) data += line.slice('data:'.length).trim();
+          }
+
+          if (!data) continue;
+          const parsed = parseWorkflowEnvelope(data);
+          if (parsed) pushEvent(parsed);
+
+          if (eventName === 'done' || eventName === 'cancelled') {
+            // Re-sync from persisted backend state at end.
+            await loadChatHistory();
+          }
+        }
+      }
+    },
+    [latexContent, loadChatHistory]
+  );
 
   const toggleChat = () => {
     setIsChatOpen(!isChatOpen);
@@ -237,31 +356,19 @@ Your main content goes here.
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatMessage.trim() || !taskId) return;
+    if (!isUuid(taskId)) return;
 
     const userMessage = chatMessage.trim();
     setChatMessage('');
-    
-    // Add user message to chat history
-    const newUserMessage = {
-      role: 'user' as const,
-      content: userMessage,
-      timestamp: new Date()
-    };
-    setChatHistory(prev => [...prev, newUserMessage]);
 
     try {
       setIsAgentWorking(true);
 
-      const res = await apiClient.fetchWithAuth(
-        `${getApiBase()}/tasks/${taskId}/ai/latex-edit`,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            message: userMessage,
-            latexContent,
-          }),
-        }
-      );
+      // Start workflow run (this endpoint persists the user message).
+      const res = await apiClient.fetchWithAuth(`${getApiBase()}/tasks/${taskId}/ai/workflow/start`, {
+        method: 'POST',
+        body: JSON.stringify({ message: userMessage, latexContent }),
+      });
 
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
@@ -269,31 +376,48 @@ Your main content goes here.
       }
 
       const data = await res.json();
+      const runId = typeof data?.workflowRunId === 'string' ? data.workflowRunId : null;
+      if (!runId) throw new Error('Workflow start succeeded but workflowRunId was missing');
 
-      const assistantMessage = typeof data?.assistantMessage === 'string' ? data.assistantMessage : '';
-      const updatedLatex = typeof data?.updatedLatex === 'string' ? data.updatedLatex : latexContent;
+      setWorkflowRunId(runId);
+      setLiveWorkflowEvents([]);
+      setPendingPlanCheckpoints(null);
+      setAiProposal(null);
 
-      setAiProposal({
-        assistantMessage,
-        updatedLatex,
-      });
-
-      // AI response is done; compile the proposed LaTeX.
-      triggerCompile();
-
-      // Re-sync chat from the persisted backend state.
-      await loadChatHistory();
+      // Start streaming workflow events.
+      await startWorkflowStream(taskId, runId);
     } catch (error) {
       console.error('Error getting AI response:', error);
       setAiProposal(null);
-      setChatHistory(prev => [
-        ...prev,
-        {
-          role: 'assistant' as const,
-          content: 'Sorry, I encountered an error. Please try again later.',
-          timestamp: new Date(),
-        },
-      ]);
+      alert('Failed to start AI workflow. Please try again.');
+    } finally {
+      setIsAgentWorking(false);
+    }
+  };
+
+  const approvePlan = async () => {
+    if (!taskId || !isUuid(taskId)) return;
+    if (!workflowRunId) return;
+    if (!pendingPlanCheckpoints) return;
+
+    setIsAgentWorking(true);
+    try {
+      const res = await apiClient.fetchWithAuth(`${getApiBase()}/tasks/${taskId}/ai/workflow/approve`, {
+        method: 'POST',
+        body: JSON.stringify({
+          workflowRunId,
+          checkpointId: 'plan',
+          approved: true,
+          edits: { checkpoints: pendingPlanCheckpoints },
+        }),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} ${errText}`);
+      }
+    } catch (e) {
+      console.error('Plan approval failed:', e);
+      alert('Failed to approve plan. Please try again.');
     } finally {
       setIsAgentWorking(false);
     }
@@ -363,7 +487,7 @@ Your main content goes here.
       <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
         <h3 className="flex items-center space-x-2 text-sm font-medium text-gray-900">
           <Bot className="h-4 w-4" />
-          <span>AI Assistant</span>
+          <span>Assistant</span>
         </h3>
         {showClose && (
           <button
@@ -378,35 +502,106 @@ Your main content goes here.
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col p-4">
-        <div className="mb-4 flex-shrink-0">
-          <p className="text-sm text-gray-600">Ask me to help with your task</p>
-          <p className="mt-1 text-xs text-gray-500">Ask for LaTeX edits; confirm before applying changes</p>
+        <div className="mb-3 flex-shrink-0">
+          <p className="text-xs text-gray-500">
+            Plan-first workflow. You’ll approve checkpoints before LaTeX changes are proposed.
+          </p>
         </div>
 
-        <div ref={chatScrollRef} className="mb-4 min-h-0 flex-1 space-y-2 overflow-y-auto">
-          {chatHistory.map((message, index) => (
-            <div
-              key={index}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[85%] rounded-lg px-3 py-2 ${
-                  message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'
-                }`}
-              >
-                <p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>
-                <p className="mt-1 text-xs opacity-70">{message.timestamp.toLocaleTimeString()}</p>
+        <div ref={chatScrollRef} className="mb-4 min-h-0 flex-1 space-y-3 overflow-y-auto">
+          {/* Persisted chat messages (includes some workflow events as JSON) */}
+          {chatHistory.map((message, index) => {
+            const evt = parseWorkflowEnvelope(message.content);
+            if (evt) {
+              return (
+                <div key={message.id || index} className="rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-medium text-gray-700">Workflow</div>
+                    <div className="text-[11px] text-gray-400">{message.timestamp.toLocaleTimeString()}</div>
+                  </div>
+                  <div className="mt-2 text-sm text-gray-900">
+                    <div className="font-medium">{evt.event.replace(/_/g, ' ')}</div>
+                    {evt.event === 'plan_proposed' && Array.isArray(evt.payload?.checkpoints) ? (
+                      <div className="mt-2 space-y-2">
+                        <div className="text-xs text-gray-600">Proposed checkpoints</div>
+                        <ul className="list-disc pl-5 text-sm text-gray-800">
+                          {evt.payload.checkpoints.map((c: any, i: number) => (
+                            <li key={String(c?.id || i)}>{String(c?.title || c?.id || 'Checkpoint')}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : evt.event === 'web_search_results' ? (
+                      <div className="mt-2">
+                        {typeof evt.payload?.summary === 'string' && evt.payload.summary.trim() ? (
+                          <p className="whitespace-pre-wrap text-sm text-gray-800">{evt.payload.summary}</p>
+                        ) : (
+                          <p className="text-sm text-gray-600">Web search completed.</p>
+                        )}
+                        {Array.isArray(evt.payload?.citations) && evt.payload.citations.length > 0 && (
+                          <div className="mt-2">
+                            <div className="text-xs font-medium text-gray-700">Citations</div>
+                            <ul className="mt-1 space-y-1 text-xs text-blue-700">
+                              {evt.payload.citations.slice(0, 8).map((c: any, i: number) => (
+                                <li key={i}>
+                                  <a
+                                    className="hover:underline"
+                                    href={String(c?.url || '#')}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    {String(c?.title || c?.url || 'source')}
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={message.id || index} className="rounded-lg border border-gray-200 bg-white p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium text-gray-700">{message.role === 'user' ? 'You' : 'Assistant'}</div>
+                  <div className="text-[11px] text-gray-400">{message.timestamp.toLocaleTimeString()}</div>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm text-gray-900">{message.content}</p>
+              </div>
+            );
+          })}
+
+          {/* Live (non-persisted) workflow events */}
+          {liveWorkflowEvents.map((evt, index) => (
+            <div key={`${evt.workflowRunId}_${evt.ts}_${index}`} className="rounded-lg border border-gray-200 bg-white p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-gray-700">Workflow</div>
+                <div className="text-[11px] text-gray-400">{new Date(evt.ts).toLocaleTimeString()}</div>
+              </div>
+              <div className="mt-2 text-sm text-gray-900">
+                <div className="font-medium">{evt.event.replace(/_/g, ' ')}</div>
+                {evt.event === 'classified' && typeof evt.payload?.intent === 'string' && (
+                  <div className="mt-1 text-sm text-gray-700">Intent: {evt.payload.intent}</div>
+                )}
+                {evt.event === 'awaiting_approval' && (
+                  <div className="mt-2 text-sm text-gray-700">Approval required.</div>
+                )}
               </div>
             </div>
           ))}
 
           {isAgentWorking && (
-            <div className="flex justify-start">
-              <div className="rounded-lg bg-gray-100 px-3 py-2 text-gray-900">
-                <div className="flex items-center space-x-2">
-                  <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-gray-600" />
-                  <span className="text-sm">AI is thinking...</span>
-                </div>
+            <div className="rounded-lg border border-gray-200 bg-white p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-gray-700">Assistant</div>
+                <div className="text-[11px] text-gray-400">Working…</div>
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-sm text-gray-700">
+                <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-gray-600" />
+                <span>Processing workflow</span>
               </div>
             </div>
           )}
@@ -414,19 +609,51 @@ Your main content goes here.
           <div ref={chatEndRef} />
         </div>
 
+        {pendingPlanCheckpoints && (
+          <div className="mb-4 flex-shrink-0 rounded-lg border border-gray-200 bg-white p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs font-medium text-gray-700">Proposed checkpoints</div>
+                <div className="mt-1 text-[11px] text-gray-500">Edit titles, then approve to continue.</div>
+              </div>
+              <button
+                type="button"
+                onClick={approvePlan}
+                disabled={isAgentWorking}
+                className="rounded-md bg-gray-900 px-3 py-2 text-xs font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Approve plan
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {pendingPlanCheckpoints.map((c, i) => (
+                <div key={c.id || i} className="flex items-center gap-2">
+                  <div className="w-6 text-right text-xs text-gray-400">{i + 1}</div>
+                  <input
+                    value={c.title}
+                    onChange={(e) =>
+                      setPendingPlanCheckpoints((prev) =>
+                        (prev || []).map((p) => (p.id === c.id ? { ...p, title: e.target.value } : p))
+                      )
+                    }
+                    className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {aiProposal && (
           <div className="mb-4 flex-shrink-0 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-            <p className="text-xs font-medium text-yellow-900">AI proposed an update</p>
-            <p className="mt-1 text-sm font-medium text-yellow-900">Confirmation required</p>
-            <p className="mt-2 whitespace-pre-wrap text-xs text-yellow-900 opacity-90">
-              {aiProposal.assistantMessage}
-            </p>
+            <p className="text-xs font-medium text-yellow-900">LaTeX proposal</p>
+            <p className="mt-2 whitespace-pre-wrap text-xs text-yellow-900 opacity-90">{aiProposal.assistantMessage}</p>
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
                 onClick={handleApplyAiProposal}
                 disabled={isAgentWorking || isSaving}
-                className="flex-1 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex-1 rounded-lg bg-gray-900 px-3 py-2 text-sm text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Apply updated LaTeX
               </button>
@@ -446,17 +673,17 @@ Your main content goes here.
           <textarea
             value={chatMessage}
             onChange={(e) => setChatMessage(e.target.value)}
-            placeholder="Ask me to help with your task..."
-            className="w-full resize-none rounded-lg border border-gray-300 p-2 text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500"
+            placeholder="Describe what you want to create or change…"
+            className="w-full resize-none rounded-lg border border-gray-200 bg-white p-2 text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-gray-900/20"
             rows={2}
           />
           <button
             type="submit"
             disabled={!chatMessage.trim() || isAgentWorking}
-            className="flex w-full items-center justify-center space-x-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center space-x-2 rounded-lg bg-gray-900 px-3 py-2 text-sm text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Bot className="h-4 w-4" />
-            <span>Send</span>
+            <span>Run</span>
           </button>
         </form>
       </div>

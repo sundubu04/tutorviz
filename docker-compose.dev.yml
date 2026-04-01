@@ -8,15 +8,19 @@ services:
     environment:
       NODE_ENV: development
       PORT: 5001
-      # Override via repo-root `.env` (e.g. hosted Supabase). Defaults match local `supabase start`.
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
-      DIRECT_URL: ${DIRECT_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
-      SUPABASE_URL: ${SUPABASE_URL:-http://host.docker.internal:54321}
+      # Override via repo-root `.env` (e.g. hosted Supabase).
+      # Defaults target the local `supabase start` containers directly (more reliable than host.docker.internal).
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@supabase_db_tutorviz:5432/postgres}
+      DIRECT_URL: ${DIRECT_URL:-postgresql://postgres:postgres@supabase_db_tutorviz:5432/postgres}
+      SUPABASE_URL: ${SUPABASE_URL:-http://supabase_kong_tutorviz:8000}
+      # Browser must use host-exposed kong, not Docker DNS.
+      SUPABASE_BROWSER_URL: ${SUPABASE_BROWSER_URL:-http://localhost:54321}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      LANGGRAPH_SERVICE_URL: ${LANGGRAPH_SERVICE_URL:-http://langgraph-service:8000}
       # File watching optimizations
       CHOKIDAR_USEPOLLING: true
       WATCHPACK_POLLING: true
@@ -28,9 +32,33 @@ services:
       - ./backend/uploads:/app/uploads
       # Exclude node_modules from volume to prevent conflicts
       - /app/backend/node_modules
-    command: sh -c "npm run db:setup && npm run dev"
+    # In dev, Prisma may prompt when changes cause data loss; accept to avoid startup hangs.
+    command: sh -c "npm run prisma:generate && npx prisma db push --accept-data-loss && npm run db:seed && npm run dev"
     restart: unless-stopped
     # Enable file watching with polling for better cross-platform support
+    stdin_open: true
+    tty: true
+    networks:
+      - default
+      - supabase
+
+  # LangGraph workflow service (Development)
+  langgraph-service:
+    build:
+      context: ./services/langgraph
+      dockerfile: Dockerfile
+    container_name: tutorviz-langgraph-dev
+    environment:
+      PORT: 8000
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_WEB_SEARCH_MODEL: ${OPENAI_WEB_SEARCH_MODEL:-gpt-4o-mini}
+      OPENAI_WEB_SEARCH_LIVE: ${OPENAI_WEB_SEARCH_LIVE:-true}
+    ports:
+      - "${LANGGRAPH_PUBLISH_PORT:-8000}:8000"
+    volumes:
+      - ./services/langgraph:/app
+    restart: unless-stopped
     stdin_open: true
     tty: true
 
@@ -56,6 +84,7 @@ services:
       - /app/backend
     depends_on:
       - backend
+      - langgraph-service
     restart: unless-stopped
     # Enable file watching with polling for better cross-platform support
     stdin_open: true
@@ -64,4 +93,7 @@ services:
 networks:
   default:
     name: tutorviz-dev-network
+  supabase:
+    external: true
+    name: supabase_network_tutorviz
 

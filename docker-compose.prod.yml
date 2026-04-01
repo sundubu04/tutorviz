@@ -13,10 +13,25 @@ services:
     environment:
       NODE_ENV: production
       PORT: "5001"
+      LANGGRAPH_SERVICE_URL: ${LANGGRAPH_SERVICE_URL:-http://langgraph-service:8000}
     expose:
       - "5001"
     volumes:
       - backend_uploads:/app/uploads
+    networks:
+      - tutorviz-prod
+
+  langgraph-service:
+    build:
+      context: ./services/langgraph
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: "8000"
+    expose:
+      - "8000"
     networks:
       - tutorviz-prod
 

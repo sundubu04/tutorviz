@@ -16,6 +16,7 @@ const calendarRoutes = require('./api/routes/calendar');
 const latexRoutes = require('./api/routes/latex');
 const taskRoutes = require('./api/routes/tasks');
 const taskAiRoutes = require('./api/routes/taskAi');
+const taskWorkflowRoutes = require('./api/routes/taskWorkflow');
 const supabaseRoutes = require('./api/routes/supabase');
 
 const app = express();
@@ -72,6 +73,7 @@ app.use('/api/latex', latexRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/supabase', supabaseRoutes);
 app.use('/api', taskAiRoutes);
+app.use('/api', taskWorkflowRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

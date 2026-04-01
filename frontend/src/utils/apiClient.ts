@@ -159,7 +159,11 @@ class ApiClient {
     options: RequestInit
   ): Promise<Headers> {
     const base = new Headers();
-    base.set('Content-Type', 'application/json');
+    // Only set JSON content-type when sending a JSON body.
+    // For streaming GETs (SSE) or non-JSON payloads, callers can set headers explicitly.
+    if (options.body !== undefined) {
+      base.set('Content-Type', 'application/json');
+    }
     const token = await this.resolveAccessToken();
     if (token) {
       base.set('Authorization', `Bearer ${token}`);
