@@ -90,8 +90,10 @@ export type AccessTokenGetter = () => Promise<string | null>;
 class ApiClient {
   private baseURL: string;
   private token: string | null;
-  /** When set, Bearer token is read from Supabase session on each request (avoids stale JWT after refresh). */
+  /** Fallback when the mirrored JWT is not ready (e.g. first paint before session restore). */
   private getAccessTokenFromSession: AccessTokenGetter | null = null;
+  /** Deduplicates concurrent `getSession()` while the mirror is still empty. */
+  private sessionTokenInFlight: Promise<string | null> | null = null;
   /** After local logout, ignore Supabase session until `setToken` is called with a new token (signOut is async). */
   private ignoreSupabaseSession = false;
 
@@ -104,7 +106,7 @@ class ApiClient {
     this.getAccessTokenFromSession = getter;
   }
 
-  // Set authentication token (mirror for localStorage / isAuthenticated; API calls prefer session getter when set)
+  // Mirror JWT from Supabase (`onAuthStateChange`, login, etc.). API calls use this first to avoid awaiting getSession on every fetch.
   setToken(token: string | null): void {
     if (token) {
       this.ignoreSupabaseSession = false;
@@ -121,15 +123,27 @@ class ApiClient {
     if (this.ignoreSupabaseSession) {
       return null;
     }
-    if (this.getAccessTokenFromSession) {
-      try {
-        const t = await this.getAccessTokenFromSession();
-        return t && t.length > 0 ? t : null;
-      } catch {
-        return null;
-      }
+    const mirrored = this.token;
+    if (mirrored && mirrored.length > 0) {
+      return mirrored;
     }
-    return this.token;
+    if (this.getAccessTokenFromSession) {
+      if (!this.sessionTokenInFlight) {
+        const getter = this.getAccessTokenFromSession;
+        this.sessionTokenInFlight = (async () => {
+          try {
+            const t = await getter();
+            return t && t.length > 0 ? t : null;
+          } catch {
+            return null;
+          } finally {
+            this.sessionTokenInFlight = null;
+          }
+        })();
+      }
+      return this.sessionTokenInFlight;
+    }
+    return null;
   }
 
   /** Current access token from Supabase session (or legacy mirror). Use for raw `fetch` calls. */
