@@ -1,22 +1,24 @@
-# Tutorviz LangGraph Workflow Service (MVP)
+# Tutorviz LangGraph service
 
-This service provides a lightweight **LangGraph-style** workflow runner for TaskMaker:
+Single-step workflow: **edit LaTeX** via OpenAI, stream progress over **SSE**.
 
-- Classifies the user prompt
-- Optionally runs **web search** via OpenAI's `web_search` tool (Responses API)
-- Proposes a **checkpoint plan** and waits for approval
-- Emits a **LaTeX proposal** event for the app to review/apply
+## HTTP
 
-## Endpoints
-
-- `POST /workflow/start` → `{ workflowRunId }`
-- `POST /workflow/approve` → `{ ok: true }`
-- `GET /workflow/stream/{workflowRunId}` → SSE stream of workflow events
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Service probe |
+| `GET` | `/health` | `{ ok, openaiConfigured }` |
+| `POST` | `/workflow/start` | Body: `taskId`, `message`, optional `latexContent`, optional `history[]`. Returns `{ workflowRunId }` immediately; run continues in the background. |
+| `GET` | `/workflow/stream/{workflowRunId}` | SSE: `hello`, `received`, `processing`, `latex_proposed` or `error`, `done` |
+| `POST` | `/editor/latex` | Synchronous LaTeX edit (same model/prompt as the graph node). |
 
 ## Environment
 
-- `OPENAI_API_KEY` (optional; enables real web search)
-- `OPENAI_MODEL` (optional)
-- `OPENAI_WEB_SEARCH_MODEL` (optional)
-- `OPENAI_WEB_SEARCH_LIVE` (optional, default `true`)
+- `OPENAI_API_KEY` — required for real edits
+- `OPENAI_MODEL` — optional (default `gpt-4o-mini` in `task_editor.py`)
 
+## Local test
+
+```bash
+cd services/langgraph && .venv/bin/python scripts/test_workflow_api.py
+```

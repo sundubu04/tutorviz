@@ -95,3 +95,7 @@ deploy/nginx-edge/01-https.conf
 # Temporary files
 *.tmp
 *.temp
+
+# Python venv (LangGraph service)
+services/langgraph/.venv/
+services/langgraph/**/*.ndjson

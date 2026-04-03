@@ -1,8 +1,7 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authenticateToken } = require('../../middleware/auth');
-
-const { editLatex } = require('../services/openaiTaskEditor');
+const { editLatexViaLanggraph } = require('../services/langgraphClient');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -39,7 +38,6 @@ router.post('/tasks/:taskId/ai/latex-edit', authenticateToken, async (req, res) 
         .json({ error: 'Missing LaTeX context (provide latexContent or ensure the task has content)' });
     }
 
-    // Persist the user message first so it becomes part of the AI context.
     await prisma.taskChatMessage.create({
       data: {
         taskId,
@@ -56,18 +54,15 @@ router.post('/tasks/:taskId/ai/latex-edit', authenticateToken, async (req, res) 
       select: { role: true, content: true },
     });
 
-    const history = lastMessages
-      .reverse()
-      .map((m) => ({ role: m.role, content: m.content }));
+    const history = lastMessages.reverse().map((m) => ({ role: m.role, content: m.content }));
 
-    const aiResult = await editLatex({
+    const aiResult = await editLatexViaLanggraph({
       taskId,
       message,
       latexContent: currentLatex,
       history,
     });
 
-    // Persist the assistant message and the proposed updated LaTeX.
     await prisma.taskChatMessage.create({
       data: {
         taskId,
@@ -89,4 +84,3 @@ router.post('/tasks/:taskId/ai/latex-edit', authenticateToken, async (req, res) 
 });
 
 module.exports = router;
-

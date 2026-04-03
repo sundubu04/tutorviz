@@ -52,8 +52,6 @@ services:
       PORT: 8000
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      OPENAI_WEB_SEARCH_MODEL: ${OPENAI_WEB_SEARCH_MODEL:-gpt-4o-mini}
-      OPENAI_WEB_SEARCH_LIVE: ${OPENAI_WEB_SEARCH_LIVE:-true}
     ports:
       - "${LANGGRAPH_PUBLISH_PORT:-8000}:8000"
     volumes:

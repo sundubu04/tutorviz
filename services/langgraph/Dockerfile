@@ -13,5 +13,6 @@ COPY app /app/app
 ENV PORT=8000
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Single process: RUNS + MemorySaver are in-memory (no cross-worker sharing).
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 

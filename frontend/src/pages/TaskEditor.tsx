@@ -12,19 +12,16 @@ import LatexToPdfViewer from '../components/LatexToPdfViewer';
 import ResizablePanel from '../components/resizable/ResizablePanel';
 import { getApiBase } from '../config/api';
 import { apiClient } from '../utils/apiClient';
+import {
+  indexOfSseBoundary,
+  parseSseBlock,
+  parseWorkflowEnvelope,
+  type WorkflowEventEnvelope,
+} from '../utils/workflowSse';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 
 type MobileEditorTab = 'code' | 'preview' | 'chat';
 type ChatRole = 'user' | 'assistant';
-
-type WorkflowEventEnvelope = {
-  type: 'workflow_event';
-  event: string;
-  workflowRunId: string;
-  taskId: string;
-  ts: number;
-  payload: any;
-};
 
 type ChatMessage = {
   id?: string;
@@ -45,11 +42,7 @@ const TaskEditor: React.FC = () => {
   const [isAgentWorking, setIsAgentWorking] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [aiProposal, setAiProposal] = useState<{ assistantMessage: string; updatedLatex: string } | null>(null);
-  const [workflowRunId, setWorkflowRunId] = useState<string | null>(null);
   const [liveWorkflowEvents, setLiveWorkflowEvents] = useState<WorkflowEventEnvelope[]>([]);
-  const [pendingPlanCheckpoints, setPendingPlanCheckpoints] = useState<
-    { id: string; title: string; status?: string }[] | null
-  >(null);
   const workflowAbortRef = useRef<AbortController | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
@@ -113,18 +106,6 @@ Your main content goes here.
   };
 
   const latexForViewer = aiProposal?.updatedLatex ?? latexContent;
-
-  const parseWorkflowEnvelope = (content: string): WorkflowEventEnvelope | null => {
-    if (!content || typeof content !== 'string') return null;
-    if (!content.trim().startsWith('{')) return null;
-    try {
-      const obj = JSON.parse(content);
-      if (obj && obj.type === 'workflow_event' && typeof obj.event === 'string') return obj as WorkflowEventEnvelope;
-      return null;
-    } catch {
-      return null;
-    }
-  };
 
   const loadChatHistory = useCallback(async () => {
     if (!taskId) return;
@@ -191,19 +172,11 @@ Your main content goes here.
 
       const pushEvent = (evt: WorkflowEventEnvelope) => {
         setLiveWorkflowEvents((prev) => [...prev, evt]);
-        if (evt.event === 'plan_proposed' && Array.isArray(evt.payload?.checkpoints)) {
-          setPendingPlanCheckpoints(
-            evt.payload.checkpoints.map((c: any) => ({
-              id: String(c.id || ''),
-              title: String(c.title || ''),
-              status: typeof c.status === 'string' ? c.status : undefined,
-            }))
-          );
-        }
         if (evt.event === 'latex_proposed') {
-          const assistantMessage =
-            typeof evt.payload?.assistantMessage === 'string' ? evt.payload.assistantMessage : 'AI proposed an update';
-          const updatedLatex = typeof evt.payload?.updatedLatex === 'string' ? evt.payload.updatedLatex : latexContent;
+          const am = evt.payload['assistantMessage'];
+          const ul = evt.payload['updatedLatex'];
+          const assistantMessage = typeof am === 'string' ? am : 'AI proposed an update';
+          const updatedLatex = typeof ul === 'string' ? ul : latexContent;
           setAiProposal({ assistantMessage, updatedLatex });
           triggerCompile();
         }
@@ -214,24 +187,18 @@ Your main content goes here.
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
 
-        let idx;
-        while ((idx = buffer.indexOf('\n\n')) !== -1) {
-          const raw = buffer.slice(0, idx);
-          buffer = buffer.slice(idx + 2);
+        let boundary: { idx: number; sepLen: number } | null;
+        while ((boundary = indexOfSseBoundary(buffer))) {
+          const raw = buffer.slice(0, boundary.idx);
+          buffer = buffer.slice(boundary.idx + boundary.sepLen);
 
-          let eventName = 'message';
-          let data = '';
-          for (const line of raw.split('\n')) {
-            if (line.startsWith('event:')) eventName = line.slice('event:'.length).trim();
-            if (line.startsWith('data:')) data += line.slice('data:'.length).trim();
-          }
+          const { eventName, data } = parseSseBlock(raw);
 
           if (!data) continue;
           const parsed = parseWorkflowEnvelope(data);
           if (parsed) pushEvent(parsed);
 
           if (eventName === 'done' || eventName === 'cancelled') {
-            // Re-sync from persisted backend state at end.
             await loadChatHistory();
           }
         }
@@ -379,9 +346,7 @@ Your main content goes here.
       const runId = typeof data?.workflowRunId === 'string' ? data.workflowRunId : null;
       if (!runId) throw new Error('Workflow start succeeded but workflowRunId was missing');
 
-      setWorkflowRunId(runId);
       setLiveWorkflowEvents([]);
-      setPendingPlanCheckpoints(null);
       setAiProposal(null);
 
       // Start streaming workflow events.
@@ -390,34 +355,6 @@ Your main content goes here.
       console.error('Error getting AI response:', error);
       setAiProposal(null);
       alert('Failed to start AI workflow. Please try again.');
-    } finally {
-      setIsAgentWorking(false);
-    }
-  };
-
-  const approvePlan = async () => {
-    if (!taskId || !isUuid(taskId)) return;
-    if (!workflowRunId) return;
-    if (!pendingPlanCheckpoints) return;
-
-    setIsAgentWorking(true);
-    try {
-      const res = await apiClient.fetchWithAuth(`${getApiBase()}/tasks/${taskId}/ai/workflow/approve`, {
-        method: 'POST',
-        body: JSON.stringify({
-          workflowRunId,
-          checkpointId: 'plan',
-          approved: true,
-          edits: { checkpoints: pendingPlanCheckpoints },
-        }),
-      });
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status} ${errText}`);
-      }
-    } catch (e) {
-      console.error('Plan approval failed:', e);
-      alert('Failed to approve plan. Please try again.');
     } finally {
       setIsAgentWorking(false);
     }
@@ -504,7 +441,7 @@ Your main content goes here.
       <div className="flex min-h-0 flex-1 flex-col p-4">
         <div className="mb-3 flex-shrink-0">
           <p className="text-xs text-gray-500">
-            Plan-first workflow. You’ll approve checkpoints before LaTeX changes are proposed.
+            AI runs in the LangGraph service (single-step). Watch status events below, then review the LaTeX proposal.
           </p>
         </div>
 
@@ -521,42 +458,8 @@ Your main content goes here.
                   </div>
                   <div className="mt-2 text-sm text-gray-900">
                     <div className="font-medium">{evt.event.replace(/_/g, ' ')}</div>
-                    {evt.event === 'plan_proposed' && Array.isArray(evt.payload?.checkpoints) ? (
-                      <div className="mt-2 space-y-2">
-                        <div className="text-xs text-gray-600">Proposed checkpoints</div>
-                        <ul className="list-disc pl-5 text-sm text-gray-800">
-                          {evt.payload.checkpoints.map((c: any, i: number) => (
-                            <li key={String(c?.id || i)}>{String(c?.title || c?.id || 'Checkpoint')}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : evt.event === 'web_search_results' ? (
-                      <div className="mt-2">
-                        {typeof evt.payload?.summary === 'string' && evt.payload.summary.trim() ? (
-                          <p className="whitespace-pre-wrap text-sm text-gray-800">{evt.payload.summary}</p>
-                        ) : (
-                          <p className="text-sm text-gray-600">Web search completed.</p>
-                        )}
-                        {Array.isArray(evt.payload?.citations) && evt.payload.citations.length > 0 && (
-                          <div className="mt-2">
-                            <div className="text-xs font-medium text-gray-700">Citations</div>
-                            <ul className="mt-1 space-y-1 text-xs text-blue-700">
-                              {evt.payload.citations.slice(0, 8).map((c: any, i: number) => (
-                                <li key={i}>
-                                  <a
-                                    className="hover:underline"
-                                    href={String(c?.url || '#')}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    {String(c?.title || c?.url || 'source')}
-                                  </a>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
+                    {evt.event === 'latex_proposed' && typeof evt.payload['assistantMessage'] === 'string' ? (
+                      <p className="mt-1 text-sm text-gray-700">{evt.payload['assistantMessage'] as string}</p>
                     ) : null}
                   </div>
                 </div>
@@ -583,12 +486,19 @@ Your main content goes here.
               </div>
               <div className="mt-2 text-sm text-gray-900">
                 <div className="font-medium">{evt.event.replace(/_/g, ' ')}</div>
-                {evt.event === 'classified' && typeof evt.payload?.intent === 'string' && (
-                  <div className="mt-1 text-sm text-gray-700">Intent: {evt.payload.intent}</div>
-                )}
-                {evt.event === 'awaiting_approval' && (
-                  <div className="mt-2 text-sm text-gray-700">Approval required.</div>
-                )}
+                {evt.event === 'received' ? (
+                  <div className="mt-1 text-xs text-gray-600">
+                    Request received (message{' '}
+                    {typeof evt.payload['messageChars'] === 'number' ? evt.payload['messageChars'] : '—'} chars, LaTeX{' '}
+                    {typeof evt.payload['latexChars'] === 'number' ? evt.payload['latexChars'] : '—'} chars).
+                  </div>
+                ) : null}
+                {evt.event === 'processing' && typeof evt.payload['step'] === 'string' ? (
+                  <div className="mt-1 text-xs text-gray-600">Step: {evt.payload['step']}</div>
+                ) : null}
+                {evt.event === 'error' && typeof evt.payload['message'] === 'string' ? (
+                  <div className="mt-1 text-sm text-red-700">{evt.payload['message']}</div>
+                ) : null}
               </div>
             </div>
           ))}
@@ -601,48 +511,13 @@ Your main content goes here.
               </div>
               <div className="mt-2 flex items-center gap-2 text-sm text-gray-700">
                 <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-gray-600" />
-                <span>Processing workflow</span>
+                <span>Waiting for LangGraph…</span>
               </div>
             </div>
           )}
 
           <div ref={chatEndRef} />
         </div>
-
-        {pendingPlanCheckpoints && (
-          <div className="mb-4 flex-shrink-0 rounded-lg border border-gray-200 bg-white p-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs font-medium text-gray-700">Proposed checkpoints</div>
-                <div className="mt-1 text-[11px] text-gray-500">Edit titles, then approve to continue.</div>
-              </div>
-              <button
-                type="button"
-                onClick={approvePlan}
-                disabled={isAgentWorking}
-                className="rounded-md bg-gray-900 px-3 py-2 text-xs font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Approve plan
-              </button>
-            </div>
-            <div className="mt-3 space-y-2">
-              {pendingPlanCheckpoints.map((c, i) => (
-                <div key={c.id || i} className="flex items-center gap-2">
-                  <div className="w-6 text-right text-xs text-gray-400">{i + 1}</div>
-                  <input
-                    value={c.title}
-                    onChange={(e) =>
-                      setPendingPlanCheckpoints((prev) =>
-                        (prev || []).map((p) => (p.id === c.id ? { ...p, title: e.target.value } : p))
-                      )
-                    }
-                    className="flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/20"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {aiProposal && (
           <div className="mb-4 flex-shrink-0 rounded-lg border border-yellow-200 bg-yellow-50 p-3">

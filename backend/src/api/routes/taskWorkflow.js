@@ -2,7 +2,8 @@ const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authenticateToken } = require('../../middleware/auth');
 const { isUuid } = require('../../utils/uuid');
-const { startWorkflow, approveWorkflow, streamWorkflow } = require('../services/langgraphClient');
+const { indexOfSseEventBoundary, parseSseEventBlock, sseFrameSeparator } = require('../../utils/sseParse');
+const { startWorkflow, streamWorkflow } = require('../services/langgraphClient');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -26,7 +27,6 @@ function safeJsonParse(s) {
   }
 }
 
-// Start a workflow run: persists the user message, then starts Python workflow.
 router.post('/tasks/:taskId/ai/workflow/start', authenticateToken, async (req, res) => {
   try {
     const { taskId } = req.params;
@@ -40,7 +40,6 @@ router.post('/tasks/:taskId/ai/workflow/start', authenticateToken, async (req, r
     const ownership = await requireOwnedTask(taskId, req.user.id);
     if (ownership.status !== 200) return res.status(ownership.status).json({ error: ownership.error });
 
-    // Persist user message in chat history (console can render it uniformly).
     await prisma.taskChatMessage.create({
       data: {
         taskId,
@@ -55,7 +54,20 @@ router.post('/tasks/:taskId/ai/workflow/start', authenticateToken, async (req, r
         ? latexContent.trim()
         : ownership.task.content || '';
 
-    const started = await startWorkflow({ taskId, message: message.trim(), latexContent: currentLatex });
+    const lastMessages = await prisma.taskChatMessage.findMany({
+      where: { taskId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: { role: true, content: true },
+    });
+    const history = lastMessages.reverse().map((m) => ({ role: m.role, content: m.content }));
+
+    const started = await startWorkflow({
+      taskId,
+      message: message.trim(),
+      latexContent: currentLatex,
+      history,
+    });
     return res.json(started);
   } catch (error) {
     console.error('Workflow start error:', error);
@@ -63,40 +75,6 @@ router.post('/tasks/:taskId/ai/workflow/start', authenticateToken, async (req, r
   }
 });
 
-// Approve / reject a checkpoint (MVP: plan approval).
-router.post('/tasks/:taskId/ai/workflow/approve', authenticateToken, async (req, res) => {
-  try {
-    const { taskId } = req.params;
-    const { workflowRunId, checkpointId, approved, edits } = req.body || {};
-
-    if (typeof workflowRunId !== 'string' || !workflowRunId.trim()) {
-      return res.status(400).json({ error: "Missing or invalid 'workflowRunId'" });
-    }
-    if (typeof checkpointId !== 'string' || !checkpointId.trim()) {
-      return res.status(400).json({ error: "Missing or invalid 'checkpointId'" });
-    }
-    if (typeof approved !== 'boolean') {
-      return res.status(400).json({ error: "Missing or invalid 'approved' (expected boolean)" });
-    }
-
-    const ownership = await requireOwnedTask(taskId, req.user.id);
-    if (ownership.status !== 200) return res.status(ownership.status).json({ error: ownership.error });
-
-    const result = await approveWorkflow({
-      workflowRunId: workflowRunId.trim(),
-      checkpointId: checkpointId.trim(),
-      approved,
-      edits: edits && typeof edits === 'object' ? edits : undefined,
-    });
-
-    return res.json(result);
-  } catch (error) {
-    console.error('Workflow approve error:', error);
-    return res.status(500).json({ error: 'Failed to approve workflow', message: error?.message || 'Internal error' });
-  }
-});
-
-// Proxy SSE from Python service and optionally persist selected events as assistant messages.
 router.get('/tasks/:taskId/ai/workflow/stream/:workflowRunId', authenticateToken, async (req, res) => {
   const { taskId, workflowRunId } = req.params;
   console.log('[workflow] stream', { taskId, workflowRunId, userId: req.user?.id });
@@ -106,6 +84,7 @@ router.get('/tasks/:taskId/ai/workflow/stream/:workflowRunId', authenticateToken
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
 
   const controller = new AbortController();
@@ -120,14 +99,13 @@ router.get('/tasks/:taskId/ai/workflow/stream/:workflowRunId', authenticateToken
     let buffer = '';
 
     const persistIfNeeded = async (evtName, dataStr) => {
-      // Only persist high-signal events; the UI will still receive everything live.
-      if (!['classified', 'plan_proposed', 'web_search_results', 'latex_proposed'].includes(evtName)) return;
+      if (evtName !== 'latex_proposed') return;
       const obj = safeJsonParse(dataStr);
       if (!obj || obj.type !== 'workflow_event') return;
 
       const content = JSON.stringify(obj);
       const proposedLatex =
-        evtName === 'latex_proposed' && obj?.payload?.updatedLatex && typeof obj.payload.updatedLatex === 'string'
+        obj?.payload?.updatedLatex && typeof obj.payload.updatedLatex === 'string'
           ? obj.payload.updatedLatex
           : null;
 
@@ -142,30 +120,21 @@ router.get('/tasks/:taskId/ai/workflow/stream/:workflowRunId', authenticateToken
       });
     };
 
-    // Minimal SSE parse loop: looks for `event:` + `data:` blocks.
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
 
-      // SSE events are separated by a blank line.
-      let idx;
-      while ((idx = buffer.indexOf('\n\n')) !== -1) {
+      let boundary;
+      while ((boundary = indexOfSseEventBoundary(buffer))) {
+        const { idx, sepLen } = boundary;
         const rawEvent = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
+        buffer = buffer.slice(idx + sepLen);
 
-        // Forward upstream event block as-is.
-        res.write(rawEvent + '\n\n');
+        res.write(rawEvent + sseFrameSeparator(sepLen));
 
-        // Extract event name + data for persistence.
-        let evtName = 'message';
-        let dataStr = '';
-        for (const line of rawEvent.split('\n')) {
-          if (line.startsWith('event:')) evtName = line.slice('event:'.length).trim();
-          if (line.startsWith('data:')) dataStr += line.slice('data:'.length).trim();
-        }
+        const { evtName, dataStr } = parseSseEventBlock(rawEvent);
         if (dataStr) {
-          // Fire and forget persistence to avoid blocking the stream.
           void persistIfNeeded(evtName, dataStr);
         }
       }
@@ -179,4 +148,3 @@ router.get('/tasks/:taskId/ai/workflow/stream/:workflowRunId', authenticateToken
 });
 
 module.exports = router;
-

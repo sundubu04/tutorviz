@@ -1,33 +1,40 @@
 const DEFAULT_BASE_URL = process.env.LANGGRAPH_SERVICE_URL || 'http://localhost:8000';
 
+const START_TIMEOUT_MS = Number(process.env.LANGGRAPH_START_TIMEOUT_MS || 180000);
+const EDIT_TIMEOUT_MS = Number(process.env.LANGGRAPH_EDIT_TIMEOUT_MS || 180000);
+
 function getBaseUrl() {
   return (process.env.LANGGRAPH_SERVICE_URL || DEFAULT_BASE_URL).replace(/\/+$/, '');
 }
 
-async function startWorkflow({ taskId, message, latexContent }) {
-  const res = await fetch(`${getBaseUrl()}/workflow/start`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ taskId, message, latexContent }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`LangGraph start failed: HTTP ${res.status} ${text}`.trim());
-  }
-  return await res.json();
+function createTimeoutSignal(ms) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  return { signal: controller.signal, cancel: () => clearTimeout(id) };
 }
 
-async function approveWorkflow({ workflowRunId, checkpointId, approved, edits }) {
-  const res = await fetch(`${getBaseUrl()}/workflow/approve`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workflowRunId, checkpointId, approved, edits }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`LangGraph approve failed: HTTP ${res.status} ${text}`.trim());
+async function startWorkflow({ taskId, message, latexContent, history }) {
+  const { signal, cancel } = createTimeoutSignal(START_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${getBaseUrl()}/workflow/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId, message, latexContent, history: history || undefined }),
+      signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`LangGraph start failed: HTTP ${res.status} ${text}`.trim());
+    }
+    return await res.json();
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      throw new Error(`LangGraph start timed out after ${START_TIMEOUT_MS}ms`);
+    }
+    throw e;
+  } finally {
+    cancel();
   }
-  return await res.json();
 }
 
 async function streamWorkflow({ workflowRunId, signal }) {
@@ -49,5 +56,28 @@ async function streamWorkflow({ workflowRunId, signal }) {
   return res;
 }
 
-module.exports = { startWorkflow, approveWorkflow, streamWorkflow };
+async function editLatexViaLanggraph({ taskId, message, latexContent, history }) {
+  const { signal, cancel } = createTimeoutSignal(EDIT_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${getBaseUrl()}/editor/latex`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskId, message, latexContent, history: history || undefined }),
+      signal,
+    });
+    const text = await res.text().catch(() => '');
+    if (!res.ok) {
+      throw new Error(`LangGraph editor failed: HTTP ${res.status} ${text}`.trim());
+    }
+    return JSON.parse(text);
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      throw new Error(`LangGraph editor timed out after ${EDIT_TIMEOUT_MS}ms`);
+    }
+    throw e;
+  } finally {
+    cancel();
+  }
+}
 
+module.exports = { startWorkflow, streamWorkflow, editLatexViaLanggraph };
